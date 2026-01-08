@@ -1976,7 +1976,7 @@ seedApiKeys().catch(console.error);
 - [x] Get task status endpoint
 - [x] KV storage for tasks
 - [ ] Queue integration
-- [ ] Integration tests
+- [x] Integration tests
 
 ### Week 3: Container & Streaming
 
