@@ -5,7 +5,7 @@ import tsparser from "@typescript-eslint/parser";
 export default [
   eslint.configs.recommended,
   {
-    files: ["src/**/*.ts"],
+    files: ["src/**/*.ts", "test/**/*.ts"],
     languageOptions: {
       parser: tsparser,
       parserOptions: {
@@ -16,14 +16,18 @@ export default [
         console: "readonly",
         crypto: "readonly",
         Response: "readonly",
+        Request: "readonly",
         URL: "readonly",
         Date: "readonly",
         TextEncoder: "readonly",
         Uint8Array: "readonly",
         Array: "readonly",
+        JSON: "readonly",
+        Map: "readonly",
         KVNamespace: "readonly",
         R2Bucket: "readonly",
         Queue: "readonly",
+        RequestInit: "readonly",
       },
     },
     plugins: {
