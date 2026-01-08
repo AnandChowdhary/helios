@@ -2,52 +2,50 @@
 
 ## Current State
 
-Documentation is now complete. 102 tests passing total:
+All core implementation is complete. 102 tests passing:
 - Unit tests: 58
 - Integration tests: 28
 - E2E tests: 16 (15 require staging env vars, 1 runs always)
 
-## Completed Tasks
-
-- E2E tests
-- Documentation (README with curl examples, TypeScript examples, error codes, status values)
+GitHub Actions deployment workflows are now created.
 
 ## Next Priority Tasks
 
-1. **Staging Deployment** - Deploy to Cloudflare and run E2E tests
-   - Set up KV namespaces, R2 bucket, Queue
-   - Deploy container image to Cloudflare Container Registry
-   - Create staging API key and run E2E tests
+1. **Configure GitHub Secrets for Deployment**
+   Required secrets for staging/production deployment:
+   - `CLOUDFLARE_API_TOKEN` - Cloudflare API token with Workers permissions
+   - `CLOUDFLARE_ACCOUNT_ID` - Already in wrangler.toml (0f5ad4e52108866c892fca418834b9b8)
+   - `STAGING_API_KEY` - API key for E2E tests (create via `npm run seed-keys`)
+   - `ANTHROPIC_API_KEY` - For E2E tests to run Claude
 
-2. **Production Deployment** - Deploy to production after staging validation
+2. **Create Staging Resources**
+   Before deploying, create these Cloudflare resources:
+   ```bash
+   # Create staging R2 bucket
+   wrangler r2 bucket create helios-artifacts-staging
 
-## How to Run E2E Tests
+   # Create staging queue
+   wrangler queues create helios-tasks-staging
+   ```
 
-E2E tests require environment variables to run against a deployed staging environment:
+3. **Deploy to Staging**
+   - Push to main branch triggers `deploy-staging.yml` workflow
+   - Or run manually: `npm run deploy:staging`
 
-```bash
-STAGING_URL=https://helios-staging.workers.dev \
-STAGING_API_KEY=your-helios-api-key \
-ANTHROPIC_API_KEY=your-anthropic-api-key \
-npm run test:e2e
-```
-
-Without these env vars, E2E tests are skipped (shows helpful message about what to set).
+4. **Production Deployment**
+   - Triggered by GitHub Release or manual workflow dispatch
+   - Runs `deploy-prod.yml` workflow
 
 ## Key Files
 
 ```
-README.md                     # Full API documentation with examples
-test/e2e/full-flow.test.ts    # E2E tests
-container/server.mjs          # HTTP server with /logs SSE endpoint
-src/routes/tasks.ts           # POST handler with sync mode SSE streaming
-src/container/runner.ts       # Container helpers including getContainerLogStream()
+.github/workflows/deploy-staging.yml  # Staging deployment workflow
+.github/workflows/deploy-prod.yml     # Production deployment workflow
+wrangler.toml                         # Full staging env config added
 ```
 
 ## Notes
 
-- Sync mode returns 200 with `Content-Type: text/event-stream`
-- Async mode returns 202 with JSON response
-- Container log file is at `/tmp/task.log`
-- Stream has 10-minute timeout built-in
-- Container is stopped after streaming completes (or on error)
+- Staging uses separate R2 bucket and queue for isolation
+- KV namespaces currently shared between staging/prod (can be separated)
+- Container config is same for both environments (Cloudflare handles isolation)

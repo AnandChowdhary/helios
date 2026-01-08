@@ -57,6 +57,11 @@ new_sqlite_classes = ["ClaudeRunner"]
 name = "helios-staging"
 vars = { ENVIRONMENT = "staging" }
 
+# Staging KV - using same namespaces as production for now
+# To create separate staging namespaces, run:
+#   wrangler kv:namespace create TASKS --env staging
+#   wrangler kv:namespace create API_KEYS --env staging
+#   wrangler kv:namespace create RATE_LIMITS --env staging
 [[env.staging.kv_namespaces]]
 binding = "TASKS"
 id = "38dcdb28b5214465925f096f05b554e1"
@@ -68,3 +73,29 @@ id = "57605e42b86f4f97936152071207d8a5"
 [[env.staging.kv_namespaces]]
 binding = "RATE_LIMITS"
 id = "0d19024897cd48d6bba3c88ddd01afae"
+
+# Staging R2 Bucket
+[[env.staging.r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "helios-artifacts-staging"
+
+# Staging Queue
+[[env.staging.queues.producers]]
+binding = "TASK_QUEUE"
+queue = "helios-tasks-staging"
+
+[[env.staging.queues.consumers]]
+queue = "helios-tasks-staging"
+max_batch_size = 1
+max_batch_timeout = 30
+
+# Staging Container - same config, Cloudflare handles isolation
+[[env.staging.containers]]
+class_name = "ClaudeRunner"
+image = "./container/Dockerfile"
+max_instances = 5
+
+# Staging Durable Object binding
+[[env.staging.durable_objects.bindings]]
+name = "CLAUDE_RUNNER"
+class_name = "ClaudeRunner"
