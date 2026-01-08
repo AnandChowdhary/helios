@@ -2,55 +2,52 @@
 
 ## Current State
 
-Container integration with Worker is now implemented:
+Container HTTP server is now implemented for Cloudflare Containers communication:
 
-- `ClaudeRunner` container class extending `@cloudflare/containers`
-- Queue consumer starts containers with task config via `startAndWaitForPorts()`
-- R2 storage binding enabled for artifacts (diff, result.json)
-- Webhook notifications sent on task completion/failure
-- 88 tests passing
+- `server.mjs` - Node.js HTTP server exposing `/health`, `/status`, and `/result` endpoints on port 8080
+- `entrypoint.sh` - Modified to start HTTP server in background and write results to `/tmp/result.json`
+- `Dockerfile` - Updated to copy server.mjs and expose port 8080
+- 99 tests passing
 
-## Architecture Note: Cloudflare Containers
+## How Container Communication Works
 
-Cloudflare Containers use an HTTP-based communication model, not stdout streaming:
-- Container is a Durable Object that controls a Docker container
-- Worker communicates with container via `fetch()` to container's HTTP port
-- The container needs to expose an HTTP server on port 8080 (or configurable port)
+Cloudflare Containers communicate via HTTP, not stdout:
 
-**Current container entrypoint.sh outputs to stdout, but Cloudflare Containers can't capture stdout directly.**
+1. Container starts HTTP server on port 8080 (background process)
+2. Task execution runs and writes status to `/tmp/status.json`
+3. On completion, results written to `/tmp/result.json`
+4. Worker fetches results via `container.fetch()` to `/result` endpoint
+5. Container waits for Worker to stop it (or sleepAfter timeout)
 
-To complete the integration, the container needs modification to either:
-1. Expose an HTTP server that returns task results via `/result` endpoint
-2. Write results to a shared location that the Worker can access
+Endpoints:
+- `GET /health` - Returns `{"status":"healthy"}`
+- `GET /status` - Returns current task status from `/tmp/status.json`
+- `GET /result` - Returns task result from `/tmp/result.json` (404 if not ready)
 
 ## Next Priority Tasks
 
-1. **Container HTTP Server** - Add simple HTTP server to container entrypoint
-   - Expose port 8080 with `/result` and `/health` endpoints
-   - Store Claude Code output in a file, serve via HTTP
-   - This is required for the `getContainerResult()` function to work
-
-2. **SSE Streaming** - Implement sync mode with Server-Sent Events
+1. **SSE Streaming** - Implement sync mode with Server-Sent Events
    - For real-time streaming of Claude Code output
+   - May need to add log streaming endpoint to container
 
-3. **E2E Tests** - Add end-to-end tests against staging environment
+2. **E2E Tests** - Add end-to-end tests against staging environment
    - Test actual container deployment
 
-4. **Production Deployment** - Deploy to Cloudflare and test with real containers
+3. **Production Deployment** - Deploy to Cloudflare and test with real containers
 
 ## Key Files
 
 ```
+container/server.mjs      # HTTP server for Cloudflare Containers
+container/entrypoint.sh   # Task runner with HTTP server startup
+container/Dockerfile      # Container image with port 8080 exposed
 src/container/runner.ts   # ClaudeRunner class + helper functions
 src/queue/consumer.ts     # Task processing with container execution
-src/types/index.ts        # Env type with CLAUDE_RUNNER binding
-wrangler.toml             # R2 + Container + DO bindings configured
 ```
 
 ## Notes
 
-- `@cloudflare/containers` package installed (v0.0.31)
-- Container config in wrangler.toml uses `[[containers]]` array syntax
-- DO binding uses `new_sqlite_classes` for container-enabled DOs
-- Integration tests mock `@cloudflare/containers` since it requires CF Workers runtime
-- Zod v4 breaking changes - cannot use `.default({})` on objects with required fields
+- HTTP server runs as background process, killed on container exit
+- Results written to /tmp for HTTP server to serve
+- Container runs indefinitely after task completion - Worker must stop it
+- Tests mock `@cloudflare/containers` since it requires CF Workers runtime
