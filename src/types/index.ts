@@ -52,7 +52,27 @@ export interface FileChange {
 
 export interface TaskQueueMessage {
   taskId: string;
-  claudeApiKey: string;
+  prompt: string;
+  repository: {
+    url: string;
+    branch: string;
+  };
+  claude: {
+    apiKey: string;
+    model: string;
+    maxTurns: number;
+    systemPrompt?: string;
+  };
+  options: {
+    timeout: number;
+    allowedTools: string[];
+    workingDirectory: string;
+    environment?: Record<string, string>;
+  };
+  webhook?: {
+    url: string;
+    secret: string;
+  };
   gitToken?: string;
 }
 

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { CreateTaskSchema, type CreateTaskInput } from "../schemas/task";
 import { validateBody } from "../middleware/validate";
-import type { Env, Task } from "../types";
+import type { Env, Task, TaskQueueMessage } from "../types";
 
 export const tasksRouter = new Hono<{ Bindings: Env }>();
 
@@ -23,6 +23,41 @@ tasksRouter.post("/", validateBody(CreateTaskSchema), async (c) => {
   await c.env.TASKS.put(taskId, JSON.stringify(task), {
     expirationTtl: 86400 * 7,
   });
+
+  // Queue task for async processing if queue is available and mode is async
+  const outputMode = input.output?.mode ?? "sync";
+  if (outputMode === "async" && c.env.TASK_QUEUE) {
+    const queueMessage: TaskQueueMessage = {
+      taskId,
+      prompt: input.prompt,
+      repository: {
+        url: input.repository.url,
+        branch: input.repository.branch,
+      },
+      claude: {
+        apiKey: input.claude.apiKey,
+        model: input.claude.model ?? "claude-sonnet-4-5",
+        maxTurns: input.claude.maxTurns ?? 10,
+        systemPrompt: input.claude.systemPrompt,
+      },
+      options: {
+        timeout: input.options?.timeout ?? 300,
+        allowedTools: input.options?.allowedTools ?? [
+          "Read",
+          "Write",
+          "Bash",
+          "Glob",
+          "Grep",
+        ],
+        workingDirectory: input.options?.workingDirectory ?? "/workspace",
+        environment: input.options?.environment,
+      },
+      webhook: input.output?.webhook,
+      gitToken: input.repository.credentials?.value,
+    };
+
+    await c.env.TASK_QUEUE.send(queueMessage);
+  }
 
   return c.json(
     {

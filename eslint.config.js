@@ -28,6 +28,8 @@ export default [
         R2Bucket: "readonly",
         Queue: "readonly",
         RequestInit: "readonly",
+        MessageBatch: "readonly",
+        Message: "readonly",
       },
     },
     plugins: {
