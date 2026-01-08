@@ -76,7 +76,10 @@ describe("CreateTaskSchema", () => {
   it("rejects invalid branch names", () => {
     const input = {
       ...validInput,
-      repository: { url: "https://github.com/user/repo", branch: "invalid branch!" },
+      repository: {
+        url: "https://github.com/user/repo",
+        branch: "invalid branch!",
+      },
     };
     const result = CreateTaskSchema.safeParse(input);
     expect(result.success).toBe(false);
@@ -85,7 +88,10 @@ describe("CreateTaskSchema", () => {
   it("accepts valid branch names with slashes", () => {
     const input = {
       ...validInput,
-      repository: { url: "https://github.com/user/repo", branch: "feature/new-feature" },
+      repository: {
+        url: "https://github.com/user/repo",
+        branch: "feature/new-feature",
+      },
     };
     const result = CreateTaskSchema.safeParse(input);
     expect(result.success).toBe(true);

@@ -37,7 +37,7 @@ describe("validateBody middleware", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "John", age: 30 }),
-      })
+      }),
     );
 
     expect(res.status).toBe(200);
@@ -51,8 +51,12 @@ describe("validateBody middleware", () => {
       new Request("http://localhost/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "John", age: 30, email: "john@example.com" }),
-      })
+        body: JSON.stringify({
+          name: "John",
+          age: 30,
+          email: "john@example.com",
+        }),
+      }),
     );
 
     expect(res.status).toBe(200);
@@ -66,7 +70,7 @@ describe("validateBody middleware", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "not valid json",
-      })
+      }),
     );
 
     expect(res.status).toBe(400);
@@ -80,7 +84,7 @@ describe("validateBody middleware", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "John" }),
-      })
+      }),
     );
 
     expect(res.status).toBe(400);
@@ -94,7 +98,7 @@ describe("validateBody middleware", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "John", age: "not a number" }),
-      })
+      }),
     );
 
     expect(res.status).toBe(400);
@@ -108,7 +112,7 @@ describe("validateBody middleware", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "", age: 30 }),
-      })
+      }),
     );
 
     expect(res.status).toBe(400);
@@ -122,7 +126,7 @@ describe("validateBody middleware", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "John", age: 30, email: "not-an-email" }),
-      })
+      }),
     );
 
     expect(res.status).toBe(400);
@@ -136,7 +140,7 @@ describe("validateBody middleware", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "John", age: -5 }),
-      })
+      }),
     );
 
     expect(res.status).toBe(400);
@@ -149,7 +153,7 @@ describe("validateBody middleware", () => {
       new Request("http://localhost/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-      })
+      }),
     );
 
     expect(res.status).toBe(400);
@@ -161,7 +165,7 @@ describe("validateBody middleware", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "Jane", age: 25 }),
-      })
+      }),
     );
 
     expect(res.status).toBe(200);

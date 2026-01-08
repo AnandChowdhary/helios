@@ -150,7 +150,7 @@ describe("Tasks API Integration", () => {
 
   function createAuthenticatedRequest(
     path: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
   ): Request {
     return new Request(`http://localhost${path}`, {
       ...options,
@@ -163,14 +163,15 @@ describe("Tasks API Integration", () => {
   }
 
   describe("POST /v1/tasks", () => {
-    it("creates a task and returns 202 Accepted", async () => {
+    it("creates async task and returns 202 Accepted", async () => {
       const env = createMockEnv();
+      const asyncPayload = { ...validPayload, output: { mode: "async" } };
       const res = await app.fetch(
         createAuthenticatedRequest("/v1/tasks", {
           method: "POST",
-          body: JSON.stringify(validPayload),
+          body: JSON.stringify(asyncPayload),
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(202);
@@ -181,16 +182,32 @@ describe("Tasks API Integration", () => {
       expect(body).toHaveProperty("statusUrl");
     });
 
+    it("creates sync task and returns 200 with SSE stream", async () => {
+      const env = createMockEnv();
+      const syncPayload = { ...validPayload, output: { mode: "sync" } };
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks", {
+          method: "POST",
+          body: JSON.stringify(syncPayload),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/event-stream");
+    });
+
     it("stores task in KV", async () => {
       const env = createMockEnv();
       const putSpy = vi.spyOn(env.TASKS, "put");
+      const asyncPayload = { ...validPayload, output: { mode: "async" } };
 
       const res = await app.fetch(
         createAuthenticatedRequest("/v1/tasks", {
           method: "POST",
-          body: JSON.stringify(validPayload),
+          body: JSON.stringify(asyncPayload),
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(202);
@@ -211,7 +228,7 @@ describe("Tasks API Integration", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(validPayload),
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(401);
@@ -224,7 +241,7 @@ describe("Tasks API Integration", () => {
           method: "POST",
           body: JSON.stringify({ prompt: "" }),
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(400);
@@ -242,7 +259,7 @@ describe("Tasks API Integration", () => {
             repository: { url: "https://malicious.com/repo" },
           }),
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(400);
@@ -255,7 +272,7 @@ describe("Tasks API Integration", () => {
           method: "POST",
           body: JSON.stringify(validPayload),
         }),
-        env
+        env,
       );
 
       expect(res.headers.get("X-RateLimit-Limit")).toBe("100");
@@ -277,7 +294,7 @@ describe("Tasks API Integration", () => {
 
       const res = await app.fetch(
         createAuthenticatedRequest("/v1/tasks/task_123"),
-        env
+        env,
       );
 
       expect(res.status).toBe(200);
@@ -290,7 +307,7 @@ describe("Tasks API Integration", () => {
       const env = createMockEnv();
       const res = await app.fetch(
         createAuthenticatedRequest("/v1/tasks/non-existent"),
-        env
+        env,
       );
 
       expect(res.status).toBe(404);
@@ -302,7 +319,7 @@ describe("Tasks API Integration", () => {
       const env = createMockEnv();
       const res = await app.fetch(
         new Request("http://localhost/v1/tasks/task_123"),
-        env
+        env,
       );
 
       expect(res.status).toBe(401);
@@ -325,7 +342,7 @@ describe("Tasks API Integration", () => {
         createAuthenticatedRequest("/v1/tasks/task_123/cancel", {
           method: "POST",
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(200);
@@ -350,7 +367,7 @@ describe("Tasks API Integration", () => {
         createAuthenticatedRequest("/v1/tasks/task_123/cancel", {
           method: "POST",
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(200);
@@ -374,7 +391,7 @@ describe("Tasks API Integration", () => {
         createAuthenticatedRequest("/v1/tasks/task_123/cancel", {
           method: "POST",
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(400);
@@ -388,7 +405,7 @@ describe("Tasks API Integration", () => {
         createAuthenticatedRequest("/v1/tasks/non-existent/cancel", {
           method: "POST",
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(404);
@@ -410,7 +427,7 @@ describe("Tasks API Integration", () => {
         createAuthenticatedRequest("/v1/tasks/task_123/cancel", {
           method: "POST",
         }),
-        env
+        env,
       );
 
       expect(putSpy).toHaveBeenCalled();
@@ -426,7 +443,7 @@ describe("Tasks API Integration", () => {
       const env = createMockEnv();
       const res = await app.fetch(
         createAuthenticatedRequest("/v1/tasks/non-existent/logs"),
-        env
+        env,
       );
 
       expect(res.status).toBe(404);
@@ -445,7 +462,7 @@ describe("Tasks API Integration", () => {
 
       const res = await app.fetch(
         createAuthenticatedRequest("/v1/tasks/task_123/logs"),
-        env
+        env,
       );
 
       expect(res.status).toBe(404);
@@ -459,7 +476,7 @@ describe("Tasks API Integration", () => {
       const env = createMockEnv();
       const res = await app.fetch(
         createAuthenticatedRequest("/v1/tasks/non-existent/diff"),
-        env
+        env,
       );
 
       expect(res.status).toBe(404);
@@ -478,7 +495,7 @@ describe("Tasks API Integration", () => {
 
       const res = await app.fetch(
         createAuthenticatedRequest("/v1/tasks/task_123/diff"),
-        env
+        env,
       );
 
       expect(res.status).toBe(404);
@@ -490,10 +507,7 @@ describe("Tasks API Integration", () => {
   describe("Public endpoints", () => {
     it("GET /health returns ok without auth", async () => {
       const env = createMockEnv();
-      const res = await app.fetch(
-        new Request("http://localhost/health"),
-        env
-      );
+      const res = await app.fetch(new Request("http://localhost/health"), env);
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as HealthBody;
@@ -504,10 +518,7 @@ describe("Tasks API Integration", () => {
 
     it("GET / returns service info without auth", async () => {
       const env = createMockEnv();
-      const res = await app.fetch(
-        new Request("http://localhost/"),
-        env
-      );
+      const res = await app.fetch(new Request("http://localhost/"), env);
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as ServiceInfoBody;
@@ -539,7 +550,7 @@ describe("Tasks API Integration", () => {
           method: "POST",
           body: JSON.stringify(asyncPayload),
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(202);
@@ -553,7 +564,7 @@ describe("Tasks API Integration", () => {
       expect(queueMessage.claude.model).toBe(validPayload.claude.model);
     });
 
-    it("does NOT queue task when output.mode is sync", async () => {
+    it("does NOT queue task when output.mode is sync (returns SSE stream)", async () => {
       const env = createMockEnvWithQueue();
       const syncPayload = {
         ...validPayload,
@@ -565,10 +576,12 @@ describe("Tasks API Integration", () => {
           method: "POST",
           body: JSON.stringify(syncPayload),
         }),
-        env
+        env,
       );
 
-      expect(res.status).toBe(202);
+      // Sync mode returns 200 with SSE stream, not 202
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/event-stream");
       expect(env.TASK_QUEUE.send).not.toHaveBeenCalled();
     });
 
@@ -584,7 +597,7 @@ describe("Tasks API Integration", () => {
           method: "POST",
           body: JSON.stringify(asyncPayload),
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(202);
@@ -609,7 +622,7 @@ describe("Tasks API Integration", () => {
           method: "POST",
           body: JSON.stringify(payloadWithWebhook),
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(202);
@@ -639,7 +652,7 @@ describe("Tasks API Integration", () => {
           method: "POST",
           body: JSON.stringify(payloadWithCredentials),
         }),
-        env
+        env,
       );
 
       expect(res.status).toBe(202);
@@ -659,7 +672,7 @@ describe("Tasks API Integration", () => {
           method: "POST",
           body: JSON.stringify(asyncPayload),
         }),
-        env
+        env,
       );
 
       const queueMessage = env.TASK_QUEUE.send.mock.calls[0][0];
@@ -692,7 +705,7 @@ describe("Tasks API Integration", () => {
           method: "POST",
           body: JSON.stringify(payloadWithOptions),
         }),
-        env
+        env,
       );
 
       const queueMessage = env.TASK_QUEUE.send.mock.calls[0][0];

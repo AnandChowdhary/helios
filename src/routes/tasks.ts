@@ -1,7 +1,13 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { CreateTaskSchema, type CreateTaskInput } from "../schemas/task";
 import { validateBody } from "../middleware/validate";
 import type { Env, Task, TaskQueueMessage } from "../types";
+import {
+  startContainerTask,
+  getContainerLogStream,
+  stopContainerTask,
+} from "../container/runner";
 
 export const tasksRouter = new Hono<{ Bindings: Env }>();
 
@@ -24,50 +30,191 @@ tasksRouter.post("/", validateBody(CreateTaskSchema), async (c) => {
     expirationTtl: 86400 * 7,
   });
 
-  // Queue task for async processing if queue is available and mode is async
   const outputMode = input.output?.mode ?? "sync";
-  if (outputMode === "async" && c.env.TASK_QUEUE) {
-    const queueMessage: TaskQueueMessage = {
-      taskId,
-      prompt: input.prompt,
-      repository: {
-        url: input.repository.url,
-        branch: input.repository.branch,
-      },
-      claude: {
-        apiKey: input.claude.apiKey,
-        model: input.claude.model ?? "claude-sonnet-4-5",
-        maxTurns: input.claude.maxTurns ?? 10,
-        systemPrompt: input.claude.systemPrompt,
-      },
-      options: {
-        timeout: input.options?.timeout ?? 300,
-        allowedTools: input.options?.allowedTools ?? [
-          "Read",
-          "Write",
-          "Bash",
-          "Glob",
-          "Grep",
-        ],
-        workingDirectory: input.options?.workingDirectory ?? "/workspace",
-        environment: input.options?.environment,
-      },
-      webhook: input.output?.webhook,
-      gitToken: input.repository.credentials?.value,
-    };
 
-    await c.env.TASK_QUEUE.send(queueMessage);
+  // Async mode: queue task and return immediately
+  if (outputMode === "async") {
+    if (c.env.TASK_QUEUE) {
+      const queueMessage: TaskQueueMessage = {
+        taskId,
+        prompt: input.prompt,
+        repository: {
+          url: input.repository.url,
+          branch: input.repository.branch,
+        },
+        claude: {
+          apiKey: input.claude.apiKey,
+          model: input.claude.model ?? "claude-sonnet-4-5",
+          maxTurns: input.claude.maxTurns ?? 10,
+          systemPrompt: input.claude.systemPrompt,
+        },
+        options: {
+          timeout: input.options?.timeout ?? 300,
+          allowedTools: input.options?.allowedTools ?? [
+            "Read",
+            "Write",
+            "Bash",
+            "Glob",
+            "Grep",
+          ],
+          workingDirectory: input.options?.workingDirectory ?? "/workspace",
+          environment: input.options?.environment,
+        },
+        webhook: input.output?.webhook,
+        gitToken: input.repository.credentials?.value,
+      };
+
+      await c.env.TASK_QUEUE.send(queueMessage);
+    }
+
+    return c.json(
+      {
+        taskId,
+        status: "pending",
+        createdAt: task.createdAt,
+        statusUrl: `${new URL(c.req.url).origin}/v1/tasks/${taskId}`,
+      },
+      202,
+    );
   }
 
-  return c.json(
-    {
-      taskId,
-      status: "pending",
-      createdAt: task.createdAt,
-      statusUrl: `${new URL(c.req.url).origin}/v1/tasks/${taskId}`,
-    },
-    202
-  );
+  // Sync mode: start container and stream SSE response
+  return streamSSE(c, async (stream) => {
+    try {
+      // Update task status to running
+      task.status = "running";
+      task.startedAt = new Date().toISOString();
+      await c.env.TASKS.put(taskId, JSON.stringify(task));
+
+      // Send initial status
+      await stream.writeSSE({
+        event: "status",
+        data: JSON.stringify({ status: "starting", taskId }),
+      });
+
+      // Start the container
+      await startContainerTask(c.env, taskId, {
+        prompt: input.prompt,
+        repository: {
+          url: input.repository.url,
+          branch: input.repository.branch,
+        },
+        claude: {
+          apiKey: input.claude.apiKey,
+          model: input.claude.model ?? "claude-sonnet-4-5",
+          maxTurns: input.claude.maxTurns ?? 10,
+          systemPrompt: input.claude.systemPrompt,
+        },
+        options: {
+          timeout: input.options?.timeout ?? 300,
+        },
+        gitToken: input.repository.credentials?.value,
+      });
+
+      await stream.writeSSE({
+        event: "status",
+        data: JSON.stringify({ status: "running", taskId }),
+      });
+
+      // Get the log stream from the container
+      const logResponse = await getContainerLogStream(c.env, taskId);
+
+      if (logResponse && logResponse.body) {
+        const reader = logResponse.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events from the container response
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          let currentEvent = "message";
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              currentEvent = line.slice(7).trim();
+            } else if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              await stream.writeSSE({
+                event: currentEvent,
+                data,
+              });
+
+              // If we got a complete event, update task and stop streaming
+              if (currentEvent === "complete") {
+                try {
+                  const result = JSON.parse(data);
+                  task.status = result.success ? "completed" : "failed";
+                  task.completedAt = new Date().toISOString();
+                  task.result = result;
+                  await c.env.TASKS.put(taskId, JSON.stringify(task));
+
+                  // Store artifacts
+                  if (result.diff) {
+                    await c.env.ARTIFACTS.put(
+                      `${taskId}/diff.patch`,
+                      result.diff,
+                    );
+                  }
+                } catch {
+                  // Ignore parse errors
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // Fallback: container didn't return a stream
+        await stream.writeSSE({
+          event: "error",
+          data: JSON.stringify({
+            code: "STREAM_ERROR",
+            message: "Failed to connect to container log stream",
+          }),
+        });
+
+        task.status = "failed";
+        task.error = "Failed to connect to container log stream";
+        task.completedAt = new Date().toISOString();
+        await c.env.TASKS.put(taskId, JSON.stringify(task));
+      }
+
+      // Stop the container after streaming is complete
+      try {
+        await stopContainerTask(c.env, taskId);
+      } catch {
+        // Container may already be stopped
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
+      await stream.writeSSE({
+        event: "error",
+        data: JSON.stringify({
+          code: "TASK_ERROR",
+          message: errorMessage,
+        }),
+      });
+
+      task.status = "failed";
+      task.error = errorMessage;
+      task.completedAt = new Date().toISOString();
+      await c.env.TASKS.put(taskId, JSON.stringify(task));
+
+      // Try to stop container on error
+      try {
+        await stopContainerTask(c.env, taskId);
+      } catch {
+        // Ignore
+      }
+    }
+  });
 });
 
 tasksRouter.get("/:id", async (c) => {

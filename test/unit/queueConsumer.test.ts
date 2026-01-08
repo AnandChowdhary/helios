@@ -5,7 +5,9 @@ import { handleQueue } from "../../src/queue/consumer";
 // Mock the container runner module
 vi.mock("../../src/container/runner", () => ({
   startContainerTask: vi.fn().mockResolvedValue(undefined),
-  getContainerState: vi.fn().mockResolvedValue({ status: "stopped_with_code", exitCode: 0 }),
+  getContainerState: vi
+    .fn()
+    .mockResolvedValue({ status: "stopped_with_code", exitCode: 0 }),
   getContainerResult: vi.fn().mockResolvedValue({
     success: true,
     summary: "Task completed successfully",
@@ -83,7 +85,7 @@ describe("Queue Consumer", () => {
   }
 
   function createMockMessage(
-    body: TaskQueueMessage
+    body: TaskQueueMessage,
   ): Message<TaskQueueMessage> {
     return {
       body,
@@ -96,7 +98,7 @@ describe("Queue Consumer", () => {
   }
 
   function createMockBatch(
-    messages: Message<TaskQueueMessage>[]
+    messages: Message<TaskQueueMessage>[],
   ): MessageBatch<TaskQueueMessage> {
     return {
       messages,
@@ -187,8 +189,14 @@ describe("Queue Consumer", () => {
     mockTasksKV.set("task_1", JSON.stringify(task1));
     mockTasksKV.set("task_2", JSON.stringify(task2));
 
-    const message1 = createMockMessage({ ...sampleQueueMessage, taskId: "task_1" });
-    const message2 = createMockMessage({ ...sampleQueueMessage, taskId: "task_2" });
+    const message1 = createMockMessage({
+      ...sampleQueueMessage,
+      taskId: "task_1",
+    });
+    const message2 = createMockMessage({
+      ...sampleQueueMessage,
+      taskId: "task_2",
+    });
     const batch = createMockBatch([message1, message2]);
 
     await handleQueue(batch, env);

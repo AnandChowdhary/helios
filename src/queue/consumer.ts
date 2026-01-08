@@ -16,7 +16,7 @@ import {
  */
 async function processQueuedTask(
   message: TaskQueueMessage,
-  env: Env
+  env: Env,
 ): Promise<void> {
   const { taskId } = message;
 
@@ -46,7 +46,11 @@ async function processQueuedTask(
       gitToken: message.gitToken,
     });
 
-    const result = await pollForCompletion(env, taskId, message.options.timeout);
+    const result = await pollForCompletion(
+      env,
+      taskId,
+      message.options.timeout,
+    );
 
     task.status = result.success ? "completed" : "failed";
     task.completedAt = new Date().toISOString();
@@ -69,7 +73,8 @@ async function processQueuedTask(
   } catch (error) {
     task.status = "failed";
     task.completedAt = new Date().toISOString();
-    task.error = error instanceof Error ? error.message : "Container execution failed";
+    task.error =
+      error instanceof Error ? error.message : "Container execution failed";
 
     await env.TASKS.put(taskId, JSON.stringify(task), {
       expirationTtl: 86400 * 7,
@@ -91,7 +96,7 @@ async function processQueuedTask(
 async function pollForCompletion(
   env: Env,
   taskId: string,
-  timeoutSeconds: number
+  timeoutSeconds: number,
 ): Promise<TaskResult> {
   const startTime = Date.now();
   const maxWaitMs = timeoutSeconds * 1000;
@@ -146,7 +151,7 @@ async function pollForCompletion(
 async function storeArtifacts(
   env: Env,
   taskId: string,
-  result: TaskResult
+  result: TaskResult,
 ): Promise<void> {
   if (result.diff) {
     await env.ARTIFACTS.put(`${taskId}/diff.patch`, result.diff, {
@@ -170,7 +175,7 @@ async function storeArtifacts(
  */
 async function sendWebhook(
   webhook: { url: string; secret: string },
-  task: Task
+  task: Task,
 ): Promise<void> {
   const payload = JSON.stringify({
     event: task.status === "completed" ? "task.completed" : "task.failed",
@@ -187,9 +192,13 @@ async function sendWebhook(
     encoder.encode(webhook.secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(payload),
+  );
   const signatureHex = Array.from(new Uint8Array(signature))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
@@ -200,7 +209,8 @@ async function sendWebhook(
       headers: {
         "Content-Type": "application/json",
         "X-Helios-Signature": `sha256=${signatureHex}`,
-        "X-Helios-Event": task.status === "completed" ? "task.completed" : "task.failed",
+        "X-Helios-Event":
+          task.status === "completed" ? "task.completed" : "task.failed",
       },
       body: payload,
     });
@@ -219,7 +229,7 @@ async function sendWebhook(
  */
 export async function handleQueue(
   batch: MessageBatch<TaskQueueMessage>,
-  env: Env
+  env: Env,
 ): Promise<void> {
   for (const message of batch.messages) {
     try {

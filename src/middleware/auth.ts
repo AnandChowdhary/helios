@@ -36,7 +36,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Env }>(
     c.set("apiKey", keyData);
 
     await next();
-  }
+  },
 );
 
 export { hashApiKey };

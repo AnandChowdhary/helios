@@ -27,13 +27,13 @@ export const rateLimitMiddleware = createMiddleware<{ Bindings: Env }>(
     c.header("X-RateLimit-Limit", apiKey.rateLimit.toString());
     c.header(
       "X-RateLimit-Remaining",
-      (apiKey.rateLimit - count - 1).toString()
+      (apiKey.rateLimit - count - 1).toString(),
     );
     c.header(
       "X-RateLimit-Reset",
-      ((Math.floor(now / 60000) + 1) * 60000).toString()
+      ((Math.floor(now / 60000) + 1) * 60000).toString(),
     );
 
     await next();
-  }
+  },
 );

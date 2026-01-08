@@ -20,6 +20,7 @@ export default [
         URL: "readonly",
         Date: "readonly",
         TextEncoder: "readonly",
+        TextDecoder: "readonly",
         Uint8Array: "readonly",
         Array: "readonly",
         JSON: "readonly",
