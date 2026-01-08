@@ -1980,8 +1980,8 @@ seedApiKeys().catch(console.error);
 
 ### Week 3: Container & Streaming
 
-- [ ] Container Dockerfile
-- [ ] Entrypoint script
+- [x] Container Dockerfile
+- [x] Entrypoint script
 - [ ] Container integration with Worker
 - [ ] SSE streaming for sync mode
 - [ ] R2 storage for artifacts

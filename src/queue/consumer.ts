@@ -22,21 +22,11 @@ async function processQueuedTask(
     expirationTtl: 86400 * 7,
   });
 
-  try {
-    console.log(`Task ${taskId} queued for processing`, {
-      repository: message.repository.url,
-      model: message.claude.model,
-    });
-  } catch (error) {
-    task.status = "failed";
-    task.error = error instanceof Error ? error.message : "Unknown error";
-    task.completedAt = new Date().toISOString();
-    await env.TASKS.put(taskId, JSON.stringify(task), {
-      expirationTtl: 86400 * 7,
-    });
-
-    console.error(`Task ${taskId} failed:`, error);
-  }
+  // TODO: Container execution will be added when Cloudflare Containers integration is ready
+  console.log(`Task ${taskId} queued for processing`, {
+    repository: message.repository.url,
+    model: message.claude.model,
+  });
 }
 
 /**
