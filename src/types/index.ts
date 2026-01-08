@@ -4,11 +4,15 @@ export interface Env {
   API_KEYS: KVNamespace;
   RATE_LIMITS: KVNamespace;
 
-  // R2 Bucket (enable in dashboard first)
-  ARTIFACTS?: R2Bucket;
+  // R2 Bucket for storing logs and artifacts
+  ARTIFACTS: R2Bucket;
 
   // Queue (requires Workers Paid plan)
   TASK_QUEUE?: Queue<TaskQueueMessage>;
+
+  // Container binding for Claude Code runner
+  // This is a DurableObjectNamespace that creates container-enabled Durable Objects
+  CLAUDE_RUNNER: DurableObjectNamespace;
 
   // Secrets (set via wrangler secret put)
   WEBHOOK_SIGNING_KEY?: string;

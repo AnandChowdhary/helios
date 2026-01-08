@@ -1,4 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// Mock @cloudflare/containers before importing the app
+vi.mock("@cloudflare/containers", () => ({
+  Container: class MockContainer {
+    defaultPort = 8080;
+    sleepAfter = "5m";
+    enableInternet = true;
+    async fetch() {
+      return new Response("{}");
+    }
+  },
+  getRandom: vi.fn(),
+  loadBalance: vi.fn(),
+  getContainer: vi.fn(),
+  switchPort: vi.fn(),
+}));
+
 import app from "../../src/index";
 import type { Env, Task, ApiKey } from "../../src/types";
 import { hashApiKey } from "../../src/middleware/auth";
@@ -108,6 +125,25 @@ describe("Tasks API Integration", () => {
         list: vi.fn(),
         getWithMetadata: vi.fn(),
       } as unknown as KVNamespace,
+      ARTIFACTS: {
+        get: vi.fn().mockResolvedValue(null),
+        put: vi.fn(),
+        delete: vi.fn(),
+        list: vi.fn(),
+        head: vi.fn(),
+      } as unknown as R2Bucket,
+      CLAUDE_RUNNER: {
+        idFromName: vi.fn((name: string) => ({ toString: () => name })),
+        get: vi.fn(() => ({
+          startAndWaitForPorts: vi.fn(),
+          getState: vi.fn(),
+          fetch: vi.fn(),
+          stop: vi.fn(),
+        })),
+        newUniqueId: vi.fn(),
+        idFromString: vi.fn(),
+        jurisdiction: vi.fn(),
+      } as unknown as DurableObjectNamespace,
       ENVIRONMENT: "test",
     };
   }
@@ -396,7 +432,7 @@ describe("Tasks API Integration", () => {
       expect(res.status).toBe(404);
     });
 
-    it("returns 503 when ARTIFACTS not configured", async () => {
+    it("returns 404 when logs not found in storage", async () => {
       const env = createMockEnv();
       const task: Task = {
         id: "task_123",
@@ -412,9 +448,9 @@ describe("Tasks API Integration", () => {
         env
       );
 
-      expect(res.status).toBe(503);
+      expect(res.status).toBe(404);
       const body = (await res.json()) as ErrorBody;
-      expect(body.error.message).toBe("Logs storage not configured");
+      expect(body.error.message).toBe("Logs not found");
     });
   });
 
@@ -429,7 +465,7 @@ describe("Tasks API Integration", () => {
       expect(res.status).toBe(404);
     });
 
-    it("returns 503 when ARTIFACTS not configured", async () => {
+    it("returns 404 when diff not found in storage", async () => {
       const env = createMockEnv();
       const task: Task = {
         id: "task_123",
@@ -445,9 +481,9 @@ describe("Tasks API Integration", () => {
         env
       );
 
-      expect(res.status).toBe(503);
+      expect(res.status).toBe(404);
       const body = (await res.json()) as ErrorBody;
-      expect(body.error.message).toBe("Diff storage not configured");
+      expect(body.error.message).toBe("Diff not found");
     });
   });
 

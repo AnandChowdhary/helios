@@ -1982,9 +1982,9 @@ seedApiKeys().catch(console.error);
 
 - [x] Container Dockerfile
 - [x] Entrypoint script
-- [ ] Container integration with Worker
+- [x] Container integration with Worker
 - [ ] SSE streaming for sync mode
-- [ ] R2 storage for artifacts
+- [x] R2 storage for artifacts
 
 ### Week 4: Polish & Deploy
 

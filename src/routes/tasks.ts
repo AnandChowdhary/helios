@@ -112,10 +112,6 @@ tasksRouter.get("/:id/logs", async (c) => {
     return c.json({ error: { message: "Task not found" } }, 404);
   }
 
-  if (!c.env.ARTIFACTS) {
-    return c.json({ error: { message: "Logs storage not configured" } }, 503);
-  }
-
   const logs = await c.env.ARTIFACTS.get(`${taskId}/logs.txt`);
 
   if (!logs) {
@@ -133,10 +129,6 @@ tasksRouter.get("/:id/diff", async (c) => {
 
   if (!task) {
     return c.json({ error: { message: "Task not found" } }, 404);
-  }
-
-  if (!c.env.ARTIFACTS) {
-    return c.json({ error: { message: "Diff storage not configured" } }, 503);
   }
 
   const diff = await c.env.ARTIFACTS.get(`${taskId}/diff.patch`);

@@ -23,7 +23,13 @@
     "type": "git",
     "url": "git+https://github.com/AnandChowdhary/helios.git"
   },
-  "keywords": ["cloudflare", "workers", "claude", "ai", "api"],
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "claude",
+    "ai",
+    "api"
+  ],
   "author": "Anand Chowdhary",
   "license": "MIT",
   "bugs": {
@@ -31,6 +37,7 @@
   },
   "homepage": "https://github.com/AnandChowdhary/helios#readme",
   "dependencies": {
+    "@cloudflare/containers": "^0.0.31",
     "hono": "^4.11.3",
     "uuid": "^13.0.0",
     "zod": "^4.3.5"
