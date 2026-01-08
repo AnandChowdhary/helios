@@ -1992,7 +1992,7 @@ seedApiKeys().catch(console.error);
 - [x] Logs and diff endpoints
 - [x] E2E tests
 - [ ] Staging deployment
-- [ ] Documentation
+- [x] Documentation
 - [ ] Production deployment
 
 ---
