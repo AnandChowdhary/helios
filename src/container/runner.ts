@@ -1,5 +1,5 @@
 import { Container } from "@cloudflare/containers";
-import type { Env, Task, TaskResult } from "../types";
+import type { Env, TaskResult } from "../types";
 
 /**
  * ClaudeRunner is a container-enabled Durable Object that runs Claude Code tasks.
@@ -17,44 +17,20 @@ import type { Env, Task, TaskResult } from "../types";
  * - Worker fetches results from /result endpoint
  */
 export class ClaudeRunner extends Container<Env> {
-  // Port the container's result server listens on
   defaultPort = 8080;
-
-  // Keep container alive for 5 minutes after last activity
-  // This allows time for long-running Claude Code tasks
   sleepAfter = "5m";
-
-  // Enable internet access for git clone and Claude API calls
   enableInternet = true;
 
-  /**
-   * Called when the container starts successfully
-   */
   override async onStart(): Promise<void> {
-    console.log(`ClaudeRunner container started`);
+    console.log("ClaudeRunner container started");
   }
 
-  /**
-   * Called when the container stops
-   */
   override async onStop(): Promise<void> {
-    console.log(`ClaudeRunner container stopped`);
+    console.log("ClaudeRunner container stopped");
   }
 
-  /**
-   * Called when the container encounters an error
-   */
   override async onError(error: unknown): Promise<void> {
-    console.error(`ClaudeRunner container error:`, error);
-  }
-
-  /**
-   * Fetch handler for the Durable Object
-   * Proxies requests to the container's HTTP server
-   */
-  override async fetch(request: Request): Promise<Response> {
-    // Forward the request to the container
-    return super.fetch(request);
+    console.error("ClaudeRunner container error:", error);
   }
 }
 
@@ -124,10 +100,7 @@ export async function getContainerState(
 }> {
   const containerId = env.CLAUDE_RUNNER.idFromName(taskId);
   const container = env.CLAUDE_RUNNER.get(containerId) as DurableObjectStub<ClaudeRunner>;
-
-  // Call getState on the container
-  const state = await container.getState();
-  return state;
+  return container.getState();
 }
 
 /**
@@ -145,17 +118,12 @@ export async function getContainerResult(
   const container = env.CLAUDE_RUNNER.get(containerId) as DurableObjectStub<ClaudeRunner>;
 
   try {
-    // Try to fetch the result from the container's HTTP server
     const response = await container.fetch(new Request("http://container/result"));
-
     if (!response.ok) {
       return null;
     }
-
-    const result = await response.json() as TaskResult;
-    return result;
+    return await response.json() as TaskResult;
   } catch {
-    // Container may not be ready yet or result endpoint not available
     return null;
   }
 }

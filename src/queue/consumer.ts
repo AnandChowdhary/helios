@@ -20,14 +20,12 @@ async function processQueuedTask(
 ): Promise<void> {
   const { taskId } = message;
 
-  // Get current task from KV
   const task = await env.TASKS.get<Task>(taskId, "json");
   if (!task) {
     console.error(`Task ${taskId} not found in KV`);
     return;
   }
 
-  // Update status to running
   task.status = "running";
   task.startedAt = new Date().toISOString();
   await env.TASKS.put(taskId, JSON.stringify(task), {
@@ -40,7 +38,6 @@ async function processQueuedTask(
   });
 
   try {
-    // Start the container with task configuration
     await startContainerTask(env, taskId, {
       prompt: message.prompt,
       repository: message.repository,
@@ -49,11 +46,8 @@ async function processQueuedTask(
       gitToken: message.gitToken,
     });
 
-    // Poll for container completion
-    // The container will run Claude Code and expose results via HTTP
     const result = await pollForCompletion(env, taskId, message.options.timeout);
 
-    // Update task with result
     task.status = result.success ? "completed" : "failed";
     task.completedAt = new Date().toISOString();
     task.result = result;
@@ -62,12 +56,10 @@ async function processQueuedTask(
       expirationTtl: 86400 * 7,
     });
 
-    // Store artifacts in R2
     await storeArtifacts(env, taskId, result);
 
-    // Send webhook notification if configured
     if (message.webhook) {
-      await sendWebhook(message.webhook, task, env);
+      await sendWebhook(message.webhook, task);
     }
 
     console.log(`Task ${taskId} completed`, {
@@ -75,7 +67,6 @@ async function processQueuedTask(
       filesChanged: result.filesChanged?.length || 0,
     });
   } catch (error) {
-    // Update task as failed
     task.status = "failed";
     task.completedAt = new Date().toISOString();
     task.error = error instanceof Error ? error.message : "Container execution failed";
@@ -84,9 +75,8 @@ async function processQueuedTask(
       expirationTtl: 86400 * 7,
     });
 
-    // Send failure webhook if configured
     if (message.webhook) {
-      await sendWebhook(message.webhook, task, env);
+      await sendWebhook(message.webhook, task);
     }
 
     console.error(`Task ${taskId} failed:`, error);
@@ -109,17 +99,13 @@ async function pollForCompletion(
   const maxPollInterval = 30000; // Max 30 second intervals
 
   while (Date.now() - startTime < maxWaitMs) {
-    // Check container state
     const state = await getContainerState(env, taskId);
 
     if (state.status === "stopped_with_code") {
-      // Container has exited - try to get result
       const result = await getContainerResult(env, taskId);
       if (result) {
         return result;
       }
-
-      // Container exited but no result - return failure
       return {
         success: false,
         summary: `Container exited with code ${state.exitCode ?? "unknown"}`,
@@ -129,7 +115,6 @@ async function pollForCompletion(
     }
 
     if (state.status === "stopped") {
-      // Container stopped without exit code
       const result = await getContainerResult(env, taskId);
       if (result) {
         return result;
@@ -143,18 +128,15 @@ async function pollForCompletion(
       };
     }
 
-    // Container still running - try to get result (may be available before container stops)
     const result = await getContainerResult(env, taskId);
     if (result) {
       return result;
     }
 
-    // Wait before next poll with exponential backoff
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
     pollInterval = Math.min(pollInterval * 1.5, maxPollInterval);
   }
 
-  // Timeout exceeded
   throw new Error(`Task timed out after ${timeoutSeconds} seconds`);
 }
 
@@ -166,7 +148,6 @@ async function storeArtifacts(
   taskId: string,
   result: TaskResult
 ): Promise<void> {
-  // Store diff if available
   if (result.diff) {
     await env.ARTIFACTS.put(`${taskId}/diff.patch`, result.diff, {
       customMetadata: {
@@ -176,7 +157,6 @@ async function storeArtifacts(
     });
   }
 
-  // Store full result as JSON
   await env.ARTIFACTS.put(`${taskId}/result.json`, JSON.stringify(result), {
     customMetadata: {
       taskId,
@@ -190,8 +170,7 @@ async function storeArtifacts(
  */
 async function sendWebhook(
   webhook: { url: string; secret: string },
-  task: Task,
-  env: Env
+  task: Task
 ): Promise<void> {
   const payload = JSON.stringify({
     event: task.status === "completed" ? "task.completed" : "task.failed",
@@ -202,7 +181,6 @@ async function sendWebhook(
     completedAt: task.completedAt,
   });
 
-  // Create HMAC signature
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
