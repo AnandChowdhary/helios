@@ -108,19 +108,83 @@ describe("Container", () => {
 
     it("handles task status events", () => {
       const content = readFileSync(entrypointPath, "utf-8");
-      // The log_status function outputs status events
-      expect(content).toContain("log_status");
+      // The update_status function updates status file and logs status events
+      expect(content).toContain("update_status");
       // Check that all status types are used
-      expect(content).toMatch(/log_status\s+"cloning"/);
-      expect(content).toMatch(/log_status\s+"running"/);
-      expect(content).toMatch(/log_status\s+"completed"/);
-      expect(content).toMatch(/log_status\s+"failed"/);
+      expect(content).toMatch(/update_status\s+"cloning"/);
+      expect(content).toMatch(/update_status\s+"running"/);
+      expect(content).toMatch(/update_status\s+"completed"/);
+      expect(content).toMatch(/update_status\s+"failed"/);
     });
 
     it("collects git diff results", () => {
       const content = readFileSync(entrypointPath, "utf-8");
       expect(content).toContain("git diff");
       expect(content).toContain("filesChanged");
+    });
+
+    it("starts HTTP server for Cloudflare Containers communication", () => {
+      const content = readFileSync(entrypointPath, "utf-8");
+      // Should start the HTTP server in background
+      expect(content).toContain("node /server.mjs");
+      expect(content).toContain("HTTP_SERVER_PID");
+    });
+
+    it("writes results to file for HTTP server", () => {
+      const content = readFileSync(entrypointPath, "utf-8");
+      // Should write results to /tmp/result.json for HTTP server to serve
+      expect(content).toContain("RESULT_FILE");
+      expect(content).toContain("write_result");
+    });
+
+    it("writes status to file for HTTP server", () => {
+      const content = readFileSync(entrypointPath, "utf-8");
+      // Should write status to /tmp/status.json for HTTP server to serve
+      expect(content).toContain("STATUS_FILE");
+    });
+  });
+
+  describe("server.mjs", () => {
+    const serverPath = join(containerDir, "server.mjs");
+
+    it("exists", () => {
+      expect(existsSync(serverPath)).toBe(true);
+    });
+
+    it("has proper shebang for Node.js", () => {
+      const content = readFileSync(serverPath, "utf-8");
+      expect(content.startsWith("#!/usr/bin/env node")).toBe(true);
+    });
+
+    it("exposes health endpoint", () => {
+      const content = readFileSync(serverPath, "utf-8");
+      expect(content).toContain("/health");
+    });
+
+    it("exposes result endpoint", () => {
+      const content = readFileSync(serverPath, "utf-8");
+      expect(content).toContain("/result");
+    });
+
+    it("exposes status endpoint", () => {
+      const content = readFileSync(serverPath, "utf-8");
+      expect(content).toContain("/status");
+    });
+
+    it("reads result from /tmp/result.json", () => {
+      const content = readFileSync(serverPath, "utf-8");
+      expect(content).toContain("/tmp/result.json");
+    });
+
+    it("uses port 8080 by default", () => {
+      const content = readFileSync(serverPath, "utf-8");
+      expect(content).toContain("8080");
+    });
+
+    it("handles graceful shutdown", () => {
+      const content = readFileSync(serverPath, "utf-8");
+      expect(content).toContain("SIGTERM");
+      expect(content).toContain("SIGINT");
     });
   });
 });

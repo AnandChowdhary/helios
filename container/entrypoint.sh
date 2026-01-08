@@ -1,21 +1,73 @@
 #!/bin/bash
 # Helios Task Runner Entrypoint
 # Clones a repository and executes Claude Code with the provided prompt
+#
+# For Cloudflare Containers, this script:
+# 1. Starts an HTTP server on port 8080 for communication with the Worker
+# 2. Writes status updates to /tmp/status.json
+# 3. Writes final result to /tmp/result.json
 set -euo pipefail
+
+# File paths for HTTP server communication
+STATUS_FILE="/tmp/status.json"
+RESULT_FILE="/tmp/result.json"
+LOG_FILE="/tmp/task.log"
+
+# Initialize status file
+echo '{"status":"starting","message":"Task runner initializing"}' > "$STATUS_FILE"
+
+# Start HTTP server in background for Cloudflare Containers communication
+echo "Starting HTTP server..."
+node /server.mjs &
+HTTP_SERVER_PID=$!
+
+# Give server time to start
+sleep 1
+
+# Check if server started successfully
+if ! kill -0 "$HTTP_SERVER_PID" 2>/dev/null; then
+  echo "Failed to start HTTP server"
+  exit 1
+fi
+
+echo "HTTP server started (PID: $HTTP_SERVER_PID)"
+
+# Cleanup function to stop HTTP server on exit
+cleanup() {
+  echo "Stopping HTTP server..."
+  kill "$HTTP_SERVER_PID" 2>/dev/null || true
+  wait "$HTTP_SERVER_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
 
 # Structured logging function - outputs JSON for the Worker to parse
 log_event() {
   local type="$1"
   local data="$2"
-  echo "{\"type\":\"$type\",\"data\":$data,\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+  local event="{\"type\":\"$type\",\"data\":$data,\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+  echo "$event"
+  echo "$event" >> "$LOG_FILE"
 }
 
-log_status() {
-  log_event "status" "{\"status\":\"$1\",\"message\":\"$2\"}"
+# Update status file and log
+update_status() {
+  local status="$1"
+  local message="$2"
+  local json="{\"status\":\"$status\",\"message\":\"$message\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+  echo "$json" > "$STATUS_FILE"
+  log_event "status" "{\"status\":\"$status\",\"message\":\"$message\"}"
 }
 
 log_error() {
-  log_event "error" "{\"code\":\"$1\",\"message\":\"$2\"}"
+  local code="$1"
+  local message="$2"
+  log_event "error" "{\"code\":\"$code\",\"message\":\"$message\"}"
+}
+
+# Write final result to result file
+write_result() {
+  local result="$1"
+  echo "$result" > "$RESULT_FILE"
 }
 
 # Validate required environment variables
@@ -28,6 +80,7 @@ validate_env() {
 
   if [[ ${#missing[@]} -gt 0 ]]; then
     log_error "MISSING_ENV" "Missing required environment variables: ${missing[*]}"
+    write_result "{\"success\":false,\"error\":\"Missing required environment variables: ${missing[*]}\"}"
     exit 1
   fi
 }
@@ -49,7 +102,7 @@ clone_repository() {
   local branch="${REPO_BRANCH:-main}"
   local clone_dir="/workspace/repo"
 
-  log_status "cloning" "Cloning repository: $repo_url (branch: $branch)"
+  update_status "cloning" "Cloning repository: $repo_url (branch: $branch)"
 
   # Add token to URL if provided
   if [[ -n "${GIT_TOKEN:-}" ]]; then
@@ -60,6 +113,7 @@ clone_repository() {
   # Clone with limited depth for faster checkout
   if ! git clone --depth 100 --branch "$branch" "$repo_url" "$clone_dir" 2>&1; then
     log_error "CLONE_FAILED" "Failed to clone repository"
+    write_result "{\"success\":false,\"error\":\"Failed to clone repository\"}"
     exit 1
   fi
 
@@ -69,7 +123,7 @@ clone_repository() {
   local task_branch="helios/task-$(date +%s)"
   git checkout -b "$task_branch"
 
-  log_status "cloned" "Repository cloned successfully on branch: $task_branch"
+  update_status "cloned" "Repository cloned successfully on branch: $task_branch"
 
   echo "$clone_dir"
 }
@@ -80,7 +134,7 @@ run_claude() {
   local max_turns="${MAX_TURNS:-10}"
   local timeout="${TIMEOUT:-300}"
 
-  log_status "running" "Starting Claude Code (model: $model, max_turns: $max_turns)"
+  update_status "running" "Starting Claude Code (model: $model, max_turns: $max_turns)"
 
   # Build Claude command arguments
   local claude_args=(
@@ -123,7 +177,10 @@ run_claude() {
 
 # Collect results after Claude Code execution
 collect_results() {
-  log_status "collecting" "Collecting task results"
+  local success="$1"
+  local error_message="${2:-}"
+
+  update_status "collecting" "Collecting task results"
 
   # Get git diff (if any changes were made)
   local diff=""
@@ -157,27 +214,47 @@ collect_results() {
 
   # Build result object
   local result
-  result=$(jq -n \
-    --argjson success true \
-    --arg summary "Task completed" \
-    --argjson files "$files_json" \
-    --argjson diff "$escaped_diff" \
-    --argjson commits "$commit_count" \
-    '{
-      success: $success,
-      summary: $summary,
-      filesChanged: $files,
-      diff: $diff,
-      commits: $commits,
-      usage: {inputTokens: 0, outputTokens: 0}
-    }')
+  if [[ "$success" == "true" ]]; then
+    result=$(jq -n \
+      --argjson success true \
+      --arg summary "Task completed successfully" \
+      --argjson files "$files_json" \
+      --argjson diff "$escaped_diff" \
+      --argjson commits "$commit_count" \
+      '{
+        success: $success,
+        summary: $summary,
+        filesChanged: $files,
+        diff: $diff,
+        commits: $commits,
+        usage: {inputTokens: 0, outputTokens: 0}
+      }')
+  else
+    result=$(jq -n \
+      --argjson success false \
+      --arg summary "Task failed" \
+      --arg error "$error_message" \
+      --argjson files "$files_json" \
+      --argjson diff "$escaped_diff" \
+      --argjson commits "$commit_count" \
+      '{
+        success: $success,
+        summary: $summary,
+        error: $error,
+        filesChanged: $files,
+        diff: $diff,
+        commits: $commits,
+        usage: {inputTokens: 0, outputTokens: 0}
+      }')
+  fi
 
   log_event "result" "$result"
+  write_result "$result"
 }
 
 # Main execution flow
 main() {
-  log_status "starting" "Helios task runner starting"
+  update_status "starting" "Helios task runner starting"
 
   # Step 1: Validate environment
   validate_env
@@ -185,25 +262,31 @@ main() {
   # Step 2: Configure git
   configure_git
 
-  # Step 3: Clone repository
-  local repo_dir
-  repo_dir=$(clone_repository)
-  cd "$repo_dir"
+  # Step 3: Clone repository (this also changes to the repo directory)
+  clone_repository
 
   # Step 4: Run Claude Code
   local claude_exit=0
   run_claude || claude_exit=$?
 
   # Step 5: Collect results
-  collect_results
-
-  # Final status
   if [[ $claude_exit -eq 0 ]]; then
-    log_status "completed" "Task completed successfully"
+    collect_results "true"
+    update_status "completed" "Task completed successfully"
   else
-    log_status "failed" "Task failed with exit code: $claude_exit"
-    exit $claude_exit
+    collect_results "false" "Claude Code exited with code: $claude_exit"
+    update_status "failed" "Task failed with exit code: $claude_exit"
   fi
+
+  # Keep the HTTP server running so Cloudflare can fetch results
+  # The container will be stopped by the Worker after fetching results
+  # or by sleepAfter timeout in ClaudeRunner
+  echo "Task finished, keeping HTTP server running for result retrieval..."
+
+  # Wait indefinitely (container will be stopped externally)
+  while true; do
+    sleep 60
+  done
 }
 
 # Run main function
