@@ -48,14 +48,21 @@ export async function startContainerTask(
   config: {
     prompt: string;
     repository: { url: string; branch: string };
-    claude: { apiKey: string; model: string; maxTurns: number; systemPrompt?: string };
+    claude: {
+      apiKey: string;
+      model: string;
+      maxTurns: number;
+      systemPrompt?: string;
+    };
     options: { timeout: number };
     gitToken?: string;
-  }
+  },
 ): Promise<void> {
   // Get or create a container instance for this task
   const containerId = env.CLAUDE_RUNNER.idFromName(taskId);
-  const container = env.CLAUDE_RUNNER.get(containerId) as DurableObjectStub<ClaudeRunner>;
+  const container = env.CLAUDE_RUNNER.get(
+    containerId,
+  ) as DurableObjectStub<ClaudeRunner>;
 
   // Start the container with task configuration as environment variables
   await container.startAndWaitForPorts({
@@ -93,13 +100,15 @@ export async function startContainerTask(
  */
 export async function getContainerState(
   env: Env,
-  taskId: string
+  taskId: string,
 ): Promise<{
   status: "running" | "stopping" | "stopped" | "healthy" | "stopped_with_code";
   exitCode?: number;
 }> {
   const containerId = env.CLAUDE_RUNNER.idFromName(taskId);
-  const container = env.CLAUDE_RUNNER.get(containerId) as DurableObjectStub<ClaudeRunner>;
+  const container = env.CLAUDE_RUNNER.get(
+    containerId,
+  ) as DurableObjectStub<ClaudeRunner>;
   return container.getState();
 }
 
@@ -112,17 +121,21 @@ export async function getContainerState(
  */
 export async function getContainerResult(
   env: Env,
-  taskId: string
+  taskId: string,
 ): Promise<TaskResult | null> {
   const containerId = env.CLAUDE_RUNNER.idFromName(taskId);
-  const container = env.CLAUDE_RUNNER.get(containerId) as DurableObjectStub<ClaudeRunner>;
+  const container = env.CLAUDE_RUNNER.get(
+    containerId,
+  ) as DurableObjectStub<ClaudeRunner>;
 
   try {
-    const response = await container.fetch(new Request("http://container/result"));
+    const response = await container.fetch(
+      new Request("http://container/result"),
+    );
     if (!response.ok) {
       return null;
     }
-    return await response.json() as TaskResult;
+    return (await response.json()) as TaskResult;
   } catch {
     return null;
   }
@@ -136,10 +149,35 @@ export async function getContainerResult(
  */
 export async function stopContainerTask(
   env: Env,
-  taskId: string
+  taskId: string,
 ): Promise<void> {
   const containerId = env.CLAUDE_RUNNER.idFromName(taskId);
-  const container = env.CLAUDE_RUNNER.get(containerId) as DurableObjectStub<ClaudeRunner>;
+  const container = env.CLAUDE_RUNNER.get(
+    containerId,
+  ) as DurableObjectStub<ClaudeRunner>;
 
   await container.stop();
+}
+
+/**
+ * Gets the SSE log stream from a running container.
+ *
+ * @param env - Worker environment with CLAUDE_RUNNER binding
+ * @param taskId - Unique task identifier
+ * @returns Response with SSE stream, or null if container not ready
+ */
+export async function getContainerLogStream(
+  env: Env,
+  taskId: string,
+): Promise<Response | null> {
+  const containerId = env.CLAUDE_RUNNER.idFromName(taskId);
+  const container = env.CLAUDE_RUNNER.get(
+    containerId,
+  ) as DurableObjectStub<ClaudeRunner>;
+
+  try {
+    return await container.fetch(new Request("http://container/logs"));
+  } catch {
+    return null;
+  }
 }

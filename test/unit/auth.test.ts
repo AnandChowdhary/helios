@@ -80,10 +80,7 @@ describe("authMiddleware", () => {
 
   it("rejects requests without Authorization header", async () => {
     const env = createMockEnv();
-    const res = await app.fetch(
-      new Request("http://localhost/test"),
-      env
-    );
+    const res = await app.fetch(new Request("http://localhost/test"), env);
 
     expect(res.status).toBe(401);
     const body = (await res.json()) as ErrorBody;
@@ -96,7 +93,7 @@ describe("authMiddleware", () => {
       new Request("http://localhost/test", {
         headers: { Authorization: "Basic dXNlcjpwYXNz" },
       }),
-      env
+      env,
     );
 
     expect(res.status).toBe(401);
@@ -110,7 +107,7 @@ describe("authMiddleware", () => {
       new Request("http://localhost/test", {
         headers: { Authorization: "Bearer invalid-key" },
       }),
-      env
+      env,
     );
 
     expect(res.status).toBe(401);
@@ -128,7 +125,7 @@ describe("authMiddleware", () => {
       new Request("http://localhost/test", {
         headers: { Authorization: "Bearer disabled-key" },
       }),
-      env
+      env,
     );
 
     expect(res.status).toBe(401);
@@ -142,7 +139,7 @@ describe("authMiddleware", () => {
       new Request("http://localhost/test", {
         headers: { Authorization: "Bearer valid-api-key" },
       }),
-      env
+      env,
     );
 
     expect(res.status).toBe(200);
@@ -156,7 +153,7 @@ describe("authMiddleware", () => {
       new Request("http://localhost/test", {
         headers: { Authorization: "Bearer valid-api-key" },
       }),
-      env
+      env,
     );
 
     expect(res.status).toBe(200);

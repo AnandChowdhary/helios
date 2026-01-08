@@ -6,17 +6,19 @@
  * - GET /health - Returns container health status
  * - GET /result - Returns task execution result (from /tmp/result.json)
  * - GET /status - Returns current task status (from /tmp/status.json)
+ * - GET /logs - Server-Sent Events stream of task logs (from /tmp/task.log)
  *
  * This server runs on port 8080 (Cloudflare Containers default port).
  */
 
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
+import { existsSync, watch } from "node:fs";
 
 const PORT = process.env.PORT || 8080;
 const RESULT_FILE = "/tmp/result.json";
 const STATUS_FILE = "/tmp/status.json";
+const LOG_FILE = "/tmp/task.log";
 
 /**
  * Read JSON file safely, returning null if not found or invalid.
@@ -39,6 +41,114 @@ async function readJsonFile(path) {
 function sendJson(res, data, statusCode = 200) {
   res.writeHead(statusCode, { "Content-Type": "application/json" });
   res.end(JSON.stringify(data));
+}
+
+/**
+ * Stream logs via Server-Sent Events.
+ * Reads existing log content and then watches for new lines.
+ */
+async function streamLogs(res) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  // Track bytes read to avoid re-sending
+  let bytesRead = 0;
+  let closed = false;
+
+  res.on("close", () => {
+    closed = true;
+  });
+
+  // Function to read and send new log content
+  async function sendNewContent() {
+    if (closed || !existsSync(LOG_FILE)) return;
+
+    try {
+      const stats = await stat(LOG_FILE);
+      if (stats.size > bytesRead) {
+        const content = await readFile(LOG_FILE, "utf-8");
+        const newContent = content.slice(bytesRead);
+        bytesRead = content.length;
+
+        // Send each line as an SSE event
+        const lines = newContent.split("\n").filter(Boolean);
+        for (const line of lines) {
+          if (closed) return;
+          try {
+            // Try to parse as JSON to determine event type
+            const parsed = JSON.parse(line);
+            const eventType = parsed.type || "message";
+            res.write(`event: ${eventType}\n`);
+            res.write(`data: ${JSON.stringify(parsed.data || parsed)}\n\n`);
+          } catch {
+            // Not JSON, send as plain log
+            res.write(`event: log\n`);
+            res.write(`data: ${JSON.stringify({ message: line })}\n\n`);
+          }
+        }
+      }
+    } catch {
+      // File not ready yet, ignore
+    }
+  }
+
+  // Send initial content
+  await sendNewContent();
+
+  // Watch for file changes
+  let watcher = null;
+  if (existsSync(LOG_FILE)) {
+    try {
+      watcher = watch(LOG_FILE, async () => {
+        await sendNewContent();
+      });
+    } catch {
+      // Fallback to polling if watch fails
+    }
+  }
+
+  // Also poll for the result file to know when to end the stream
+  const pollInterval = setInterval(async () => {
+    if (closed) {
+      clearInterval(pollInterval);
+      if (watcher) watcher.close();
+      return;
+    }
+
+    // Send any new log content
+    await sendNewContent();
+
+    // Check if result is ready
+    if (existsSync(RESULT_FILE)) {
+      try {
+        const result = await readJsonFile(RESULT_FILE);
+        if (result) {
+          res.write(`event: complete\n`);
+          res.write(`data: ${JSON.stringify(result)}\n\n`);
+          clearInterval(pollInterval);
+          if (watcher) watcher.close();
+          res.end();
+        }
+      } catch {
+        // Result not ready yet
+      }
+    }
+  }, 500);
+
+  // Timeout after 10 minutes
+  setTimeout(() => {
+    if (!closed) {
+      clearInterval(pollInterval);
+      if (watcher) watcher.close();
+      res.write(`event: timeout\n`);
+      res.write(`data: ${JSON.stringify({ error: "Stream timeout" })}\n\n`);
+      res.end();
+    }
+  }, 600000);
 }
 
 /**
@@ -75,6 +185,12 @@ async function handleRequest(req, res) {
       return;
     }
     sendJson(res, status);
+    return;
+  }
+
+  // SSE logs streaming endpoint
+  if (url.pathname === "/logs") {
+    await streamLogs(res);
     return;
   }
 

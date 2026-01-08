@@ -28,7 +28,7 @@ export const CreateTaskSchema = z.object({
       .refine(
         (url) =>
           /^https:\/\/(github\.com|gitlab\.com|bitbucket\.org)/.test(url),
-        "Only GitHub, GitLab, and Bitbucket URLs are supported"
+        "Only GitHub, GitLab, and Bitbucket URLs are supported",
       ),
     branch: z
       .string()
@@ -47,7 +47,7 @@ export const CreateTaskSchema = z.object({
       .string()
       .refine(
         (key) => key.startsWith("sk-ant-"),
-        "Invalid Anthropic API key format"
+        "Invalid Anthropic API key format",
       ),
     model: z
       .enum(["claude-sonnet-4-5", "claude-opus-4"])
