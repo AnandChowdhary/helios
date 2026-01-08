@@ -1964,17 +1964,17 @@ seedApiKeys().catch(console.error);
 
 ### Week 1: Foundation
 
-- [ ] Project setup (wrangler, TypeScript, deps)
-- [ ] Core types and schemas
-- [ ] Auth and rate limiting middleware
-- [ ] Health endpoint
+- [x] Project setup (wrangler, TypeScript, deps)
+- [x] Core types and schemas
+- [x] Auth and rate limiting middleware
+- [x] Health endpoint
 - [ ] CI pipeline (lint, typecheck, unit tests)
 
 ### Week 2: Task API
 
-- [ ] Create task endpoint (async mode)
-- [ ] Get task status endpoint
-- [ ] KV storage for tasks
+- [x] Create task endpoint (async mode)
+- [x] Get task status endpoint
+- [x] KV storage for tasks
 - [ ] Queue integration
 - [ ] Integration tests
 
@@ -1988,8 +1988,8 @@ seedApiKeys().catch(console.error);
 
 ### Week 4: Polish & Deploy
 
-- [ ] Cancel task endpoint
-- [ ] Logs and diff endpoints
+- [x] Cancel task endpoint
+- [x] Logs and diff endpoints
 - [ ] E2E tests
 - [ ] Staging deployment
 - [ ] Documentation
