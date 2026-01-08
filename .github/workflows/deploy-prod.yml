@@ -26,6 +26,14 @@ jobs:
 
       - run: npm ci
 
+      - name: Ensure Queue Exists
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: queues create helios-tasks
+        continue-on-error: true  # Ignore if queue already exists
+
       - name: Deploy to Production
         uses: cloudflare/wrangler-action@v3
         with:
