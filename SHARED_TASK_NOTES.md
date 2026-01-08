@@ -2,10 +2,24 @@
 
 ## Current State
 
-E2E tests are now implemented. 102 tests passing total:
+Documentation is now complete. 102 tests passing total:
 - Unit tests: 58
 - Integration tests: 28
 - E2E tests: 16 (15 require staging env vars, 1 runs always)
+
+## Completed Tasks
+
+- E2E tests
+- Documentation (README with curl examples, TypeScript examples, error codes, status values)
+
+## Next Priority Tasks
+
+1. **Staging Deployment** - Deploy to Cloudflare and run E2E tests
+   - Set up KV namespaces, R2 bucket, Queue
+   - Deploy container image to Cloudflare Container Registry
+   - Create staging API key and run E2E tests
+
+2. **Production Deployment** - Deploy to production after staging validation
 
 ## How to Run E2E Tests
 
@@ -20,39 +34,15 @@ npm run test:e2e
 
 Without these env vars, E2E tests are skipped (shows helpful message about what to set).
 
-## E2E Test Coverage
-
-Tests in `test/e2e/full-flow.test.ts` cover:
-- Health check endpoints (`/health`, `/`)
-- Authentication (missing key, invalid key, valid key)
-- Task validation (empty prompt, invalid repo URL, invalid API key format)
-- Async task flow (create task, retrieve task, cancel task)
-- Sync task flow with SSE streaming
-- Rate limit headers
-
-Container integration tests (require full infrastructure):
-- Claude Code task execution with tool usage
-- Task timeout handling
-
 ## Key Files
 
 ```
+README.md                     # Full API documentation with examples
 test/e2e/full-flow.test.ts    # E2E tests
 container/server.mjs          # HTTP server with /logs SSE endpoint
 src/routes/tasks.ts           # POST handler with sync mode SSE streaming
 src/container/runner.ts       # Container helpers including getContainerLogStream()
 ```
-
-## Next Priority Tasks
-
-1. **Staging Deployment** - Deploy to Cloudflare and run E2E tests
-   - Set up KV namespaces, R2 bucket, Queue
-   - Deploy container image to Cloudflare Container Registry
-   - Create staging API key and run E2E tests
-
-2. **Documentation** - Add usage examples and API docs
-
-3. **Production Deployment** - Deploy to production after staging validation
 
 ## Notes
 
