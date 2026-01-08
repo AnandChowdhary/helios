@@ -2,11 +2,26 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Env, Task, TaskQueueMessage } from "../../src/types";
 import { handleQueue } from "../../src/queue/consumer";
 
+// Mock the container runner module
+vi.mock("../../src/container/runner", () => ({
+  startContainerTask: vi.fn().mockResolvedValue(undefined),
+  getContainerState: vi.fn().mockResolvedValue({ status: "stopped_with_code", exitCode: 0 }),
+  getContainerResult: vi.fn().mockResolvedValue({
+    success: true,
+    summary: "Task completed successfully",
+    filesChanged: [],
+    usage: { inputTokens: 100, outputTokens: 50 },
+  }),
+}));
+
 describe("Queue Consumer", () => {
   let mockTasksKV: Map<string, string>;
+  let mockR2: Map<string, string>;
 
   beforeEach(() => {
     mockTasksKV = new Map();
+    mockR2 = new Map();
+    vi.clearAllMocks();
   });
 
   function createMockEnv(): Env {
@@ -38,6 +53,31 @@ describe("Queue Consumer", () => {
         list: vi.fn(),
         getWithMetadata: vi.fn(),
       } as unknown as KVNamespace,
+      ARTIFACTS: {
+        put: vi.fn(async (key: string, value: string) => {
+          mockR2.set(key, value);
+        }),
+        get: vi.fn(async (key: string) => {
+          const value = mockR2.get(key);
+          if (!value) return null;
+          return { text: async () => value, body: value };
+        }),
+        delete: vi.fn(),
+        list: vi.fn(),
+        head: vi.fn(),
+      } as unknown as R2Bucket,
+      CLAUDE_RUNNER: {
+        idFromName: vi.fn((name: string) => ({ toString: () => name })),
+        get: vi.fn(() => ({
+          startAndWaitForPorts: vi.fn(),
+          getState: vi.fn(),
+          fetch: vi.fn(),
+          stop: vi.fn(),
+        })),
+        newUniqueId: vi.fn(),
+        idFromString: vi.fn(),
+        jurisdiction: vi.fn(),
+      } as unknown as DurableObjectNamespace,
       ENVIRONMENT: "test",
     };
   }
@@ -85,7 +125,7 @@ describe("Queue Consumer", () => {
     },
   };
 
-  it("processes a queued task and updates status to running", async () => {
+  it("processes a queued task and completes successfully", async () => {
     const env = createMockEnv();
     const task: Task = {
       id: "task_123",
@@ -101,10 +141,13 @@ describe("Queue Consumer", () => {
 
     await handleQueue(batch, env);
 
-    // Check task was updated to running
+    // Check task was completed
     const updatedTask = JSON.parse(mockTasksKV.get("task_123")!);
-    expect(updatedTask.status).toBe("running");
+    expect(updatedTask.status).toBe("completed");
     expect(updatedTask.startedAt).toBeDefined();
+    expect(updatedTask.completedAt).toBeDefined();
+    expect(updatedTask.result).toBeDefined();
+    expect(updatedTask.result.success).toBe(true);
 
     // Message should be acknowledged
     expect(message.ack).toHaveBeenCalled();
@@ -155,7 +198,27 @@ describe("Queue Consumer", () => {
 
     const updatedTask1 = JSON.parse(mockTasksKV.get("task_1")!);
     const updatedTask2 = JSON.parse(mockTasksKV.get("task_2")!);
-    expect(updatedTask1.status).toBe("running");
-    expect(updatedTask2.status).toBe("running");
+    expect(updatedTask1.status).toBe("completed");
+    expect(updatedTask2.status).toBe("completed");
+  });
+
+  it("stores artifacts in R2 on completion", async () => {
+    const env = createMockEnv();
+    const task: Task = {
+      id: "task_123",
+      status: "pending",
+      prompt: "Fix the bug",
+      repository: { url: "https://github.com/user/repo", branch: "main" },
+      createdAt: new Date().toISOString(),
+    };
+    mockTasksKV.set("task_123", JSON.stringify(task));
+
+    const message = createMockMessage(sampleQueueMessage);
+    const batch = createMockBatch([message]);
+
+    await handleQueue(batch, env);
+
+    // Check artifacts were stored
+    expect(env.ARTIFACTS.put).toHaveBeenCalled();
   });
 });

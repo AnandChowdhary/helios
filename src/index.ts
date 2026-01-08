@@ -8,6 +8,9 @@ import { errorHandler } from "./utils/errors";
 import { handleQueue } from "./queue/consumer";
 import type { Env, TaskQueueMessage } from "./types";
 
+// Export the ClaudeRunner Durable Object class for container execution
+export { ClaudeRunner } from "./container/runner";
+
 const VERSION = "0.1.0";
 
 const app = new Hono<{ Bindings: Env }>();

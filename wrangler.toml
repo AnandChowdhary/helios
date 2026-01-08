@@ -21,10 +21,10 @@ id = "57605e42b86f4f97936152071207d8a5"
 binding = "RATE_LIMITS"
 id = "0d19024897cd48d6bba3c88ddd01afae"
 
-# R2 Buckets (enable R2 in dashboard first, then uncomment)
-# [[r2_buckets]]
-# binding = "ARTIFACTS"
-# bucket_name = "helios-artifacts"
+# R2 Buckets for storing logs and artifacts
+[[r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "helios-artifacts"
 
 # Queues (Workers Paid plan enabled)
 [[queues.producers]]
@@ -36,11 +36,21 @@ queue = "helios-tasks"
 max_batch_size = 1
 max_batch_timeout = 30
 
-# Containers (when available)
-# [containers]
-#   [containers.CLAUDE_RUNNER]
-#   image = "helios-claude-runner:latest"
-#   max_instances = 10
+# Container for Claude Code runner
+[[containers]]
+class_name = "ClaudeRunner"
+image = "./container/Dockerfile"
+max_instances = 10
+
+# Durable Object binding for the container
+[[durable_objects.bindings]]
+name = "CLAUDE_RUNNER"
+class_name = "ClaudeRunner"
+
+# Migrations for Durable Objects (required for container-enabled DOs)
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ClaudeRunner"]
 
 # Staging environment
 [env.staging]
