@@ -14,6 +14,7 @@ export default [
       },
       globals: {
         console: "readonly",
+        process: "readonly",
         crypto: "readonly",
         Response: "readonly",
         Request: "readonly",
