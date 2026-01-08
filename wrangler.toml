@@ -1,0 +1,60 @@
+name = "helios"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "0f5ad4e52108866c892fca418834b9b8"
+
+# Environment variables (secrets added via wrangler secret)
+[vars]
+ENVIRONMENT = "production"
+
+# KV Namespaces
+[[kv_namespaces]]
+binding = "TASKS"
+id = "38dcdb28b5214465925f096f05b554e1"
+
+[[kv_namespaces]]
+binding = "API_KEYS"
+id = "57605e42b86f4f97936152071207d8a5"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "0d19024897cd48d6bba3c88ddd01afae"
+
+# R2 Buckets (enable R2 in dashboard first, then uncomment)
+# [[r2_buckets]]
+# binding = "ARTIFACTS"
+# bucket_name = "helios-artifacts"
+
+# Queues (requires Workers Paid plan, then uncomment)
+# [[queues.producers]]
+# binding = "TASK_QUEUE"
+# queue = "helios-tasks"
+
+# [[queues.consumers]]
+# queue = "helios-tasks"
+# max_batch_size = 1
+# max_batch_timeout = 30
+
+# Containers (when available)
+# [containers]
+#   [containers.CLAUDE_RUNNER]
+#   image = "helios-claude-runner:latest"
+#   max_instances = 10
+
+# Staging environment
+[env.staging]
+name = "helios-staging"
+vars = { ENVIRONMENT = "staging" }
+
+[[env.staging.kv_namespaces]]
+binding = "TASKS"
+id = "38dcdb28b5214465925f096f05b554e1"
+
+[[env.staging.kv_namespaces]]
+binding = "API_KEYS"
+id = "57605e42b86f4f97936152071207d8a5"
+
+[[env.staging.kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "0d19024897cd48d6bba3c88ddd01afae"
