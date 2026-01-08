@@ -1968,7 +1968,7 @@ seedApiKeys().catch(console.error);
 - [x] Core types and schemas
 - [x] Auth and rate limiting middleware
 - [x] Health endpoint
-- [ ] CI pipeline (lint, typecheck, unit tests)
+- [x] CI pipeline (lint, typecheck, unit tests)
 
 ### Week 2: Task API
 
