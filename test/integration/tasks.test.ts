@@ -478,4 +478,192 @@ describe("Tasks API Integration", () => {
       expect(body.name).toBe("Helios");
     });
   });
+
+  describe("Queue Integration", () => {
+    function createMockEnvWithQueue(): Env & {
+      TASK_QUEUE: { send: ReturnType<typeof vi.fn> };
+    } {
+      return {
+        ...createMockEnv(),
+        TASK_QUEUE: {
+          send: vi.fn().mockResolvedValue(undefined),
+        },
+      } as unknown as Env & { TASK_QUEUE: { send: ReturnType<typeof vi.fn> } };
+    }
+
+    it("queues task when output.mode is async and queue is available", async () => {
+      const env = createMockEnvWithQueue();
+      const asyncPayload = {
+        ...validPayload,
+        output: { mode: "async" },
+      };
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks", {
+          method: "POST",
+          body: JSON.stringify(asyncPayload),
+        }),
+        env
+      );
+
+      expect(res.status).toBe(202);
+      expect(env.TASK_QUEUE.send).toHaveBeenCalledTimes(1);
+
+      const queueMessage = env.TASK_QUEUE.send.mock.calls[0][0];
+      expect(queueMessage).toHaveProperty("taskId");
+      expect(queueMessage.prompt).toBe(validPayload.prompt);
+      expect(queueMessage.repository.url).toBe(validPayload.repository.url);
+      expect(queueMessage.claude.apiKey).toBe(validPayload.claude.apiKey);
+      expect(queueMessage.claude.model).toBe(validPayload.claude.model);
+    });
+
+    it("does NOT queue task when output.mode is sync", async () => {
+      const env = createMockEnvWithQueue();
+      const syncPayload = {
+        ...validPayload,
+        output: { mode: "sync" },
+      };
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks", {
+          method: "POST",
+          body: JSON.stringify(syncPayload),
+        }),
+        env
+      );
+
+      expect(res.status).toBe(202);
+      expect(env.TASK_QUEUE.send).not.toHaveBeenCalled();
+    });
+
+    it("does NOT queue task when queue is not available", async () => {
+      const env = createMockEnv(); // No TASK_QUEUE
+      const asyncPayload = {
+        ...validPayload,
+        output: { mode: "async" },
+      };
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks", {
+          method: "POST",
+          body: JSON.stringify(asyncPayload),
+        }),
+        env
+      );
+
+      expect(res.status).toBe(202);
+      // No error thrown, just no queueing
+    });
+
+    it("includes webhook info in queue message when provided", async () => {
+      const env = createMockEnvWithQueue();
+      const payloadWithWebhook = {
+        ...validPayload,
+        output: {
+          mode: "async",
+          webhook: {
+            url: "https://example.com/webhook",
+            secret: "super-secret-key-123",
+          },
+        },
+      };
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks", {
+          method: "POST",
+          body: JSON.stringify(payloadWithWebhook),
+        }),
+        env
+      );
+
+      expect(res.status).toBe(202);
+      const queueMessage = env.TASK_QUEUE.send.mock.calls[0][0];
+      expect(queueMessage.webhook).toEqual({
+        url: "https://example.com/webhook",
+        secret: "super-secret-key-123",
+      });
+    });
+
+    it("includes git credentials in queue message when provided", async () => {
+      const env = createMockEnvWithQueue();
+      const payloadWithCredentials = {
+        ...validPayload,
+        repository: {
+          ...validPayload.repository,
+          credentials: {
+            type: "token",
+            value: "ghp_test_token_123",
+          },
+        },
+        output: { mode: "async" },
+      };
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks", {
+          method: "POST",
+          body: JSON.stringify(payloadWithCredentials),
+        }),
+        env
+      );
+
+      expect(res.status).toBe(202);
+      const queueMessage = env.TASK_QUEUE.send.mock.calls[0][0];
+      expect(queueMessage.gitToken).toBe("ghp_test_token_123");
+    });
+
+    it("includes options in queue message with defaults", async () => {
+      const env = createMockEnvWithQueue();
+      const asyncPayload = {
+        ...validPayload,
+        output: { mode: "async" },
+      };
+
+      await app.fetch(
+        createAuthenticatedRequest("/v1/tasks", {
+          method: "POST",
+          body: JSON.stringify(asyncPayload),
+        }),
+        env
+      );
+
+      const queueMessage = env.TASK_QUEUE.send.mock.calls[0][0];
+      expect(queueMessage.options.timeout).toBe(300);
+      expect(queueMessage.options.allowedTools).toEqual([
+        "Read",
+        "Write",
+        "Bash",
+        "Glob",
+        "Grep",
+      ]);
+      expect(queueMessage.options.workingDirectory).toBe("/workspace");
+    });
+
+    it("includes custom options in queue message when provided", async () => {
+      const env = createMockEnvWithQueue();
+      const payloadWithOptions = {
+        ...validPayload,
+        options: {
+          timeout: 600,
+          allowedTools: ["Read", "Write"],
+          workingDirectory: "/custom/dir",
+          environment: { NODE_ENV: "test" },
+        },
+        output: { mode: "async" },
+      };
+
+      await app.fetch(
+        createAuthenticatedRequest("/v1/tasks", {
+          method: "POST",
+          body: JSON.stringify(payloadWithOptions),
+        }),
+        env
+      );
+
+      const queueMessage = env.TASK_QUEUE.send.mock.calls[0][0];
+      expect(queueMessage.options.timeout).toBe(600);
+      expect(queueMessage.options.allowedTools).toEqual(["Read", "Write"]);
+      expect(queueMessage.options.workingDirectory).toBe("/custom/dir");
+      expect(queueMessage.options.environment).toEqual({ NODE_ENV: "test" });
+    });
+  });
 });

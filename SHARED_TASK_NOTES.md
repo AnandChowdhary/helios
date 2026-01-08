@@ -2,45 +2,45 @@
 
 ## Current State
 
-The core API foundation and test suite are complete:
+Queue integration is now complete. The core API with async task queueing is ready:
 
-- Hono app with health endpoint
-- Auth middleware (API key via Bearer token, SHA-256 hash lookup in KV)
-- Rate limiting middleware (per-minute window via KV)
-- Validation middleware (Zod-based)
-- Task routes: POST /v1/tasks, GET /v1/tasks/:id, POST /v1/tasks/:id/cancel, GET /v1/tasks/:id/logs, GET /v1/tasks/:id/diff
-- CI pipeline: GitHub Actions with lint/typecheck/test jobs
-- Unit tests for all middleware (auth, rateLimit, validate)
-- Integration tests for task routes (61 tests total)
-
-Also I purchased Workers Paid Plan which includes Queues and Containers so you are unblocked.
+- TASK_QUEUE enabled in wrangler.toml
+- Tasks with `output.mode: "async"` are queued for background processing
+- Queue consumer handler processes messages and updates task status
+- 71 tests passing (including 10 new queue integration tests)
 
 ## Next Priority Tasks
 
-1. **Queue Integration** - Enable TASK_QUEUE when Workers Paid plan is available
-2. **Container Integration** - Implement Cloudflare Containers when API is available
-3. **E2E Tests** - Add end-to-end tests against staging environment
+1. **Container Integration** - Implement Cloudflare Containers to actually execute Claude Code tasks
+   - Create container/Dockerfile and entrypoint.sh
+   - Wire up queue consumer to start containers
+   - Stream container output to R2 for logs
+2. **E2E Tests** - Add end-to-end tests against staging environment
+3. **SSE Streaming** - Implement sync mode with Server-Sent Events
 
 ## Notes
 
+- Queue consumer currently just updates status to "running" - actual container execution is a placeholder
+- TaskQueueMessage includes all input needed for container execution (prompt, repo, claude config, options, webhook, git token)
+- R2 is still commented out in wrangler.toml - uncomment when ready to store logs/diffs
 - Zod v4 has breaking changes vs v3 - cannot use `.default({})` on objects with required fields that have their own defaults
-- R2 and Queues are commented out in wrangler.toml (need to enable in Cloudflare dashboard first)
-- Container integration not yet implemented (Cloudflare Containers API needs to be available)
 - Test error responses use `body.error.message` format from the errorHandler
 
 ## File Structure
 
 ```
 src/
-├── index.ts           # Main app entry
-├── types/index.ts     # TypeScript types
+├── index.ts           # Main app entry, route setup, exports worker
+├── types/index.ts     # TypeScript types (Env, Task, TaskQueueMessage, etc.)
 ├── schemas/task.ts    # Zod validation schemas
 ├── middleware/
 │   ├── auth.ts        # API key authentication
 │   ├── rateLimit.ts   # Per-key rate limiting
 │   └── validate.ts    # Request body validation
+├── queue/
+│   └── consumer.ts    # Queue message handler
 ├── routes/
-│   └── tasks.ts       # Task API routes
+│   └── tasks.ts       # Task API routes (queues async tasks)
 └── utils/
     └── errors.ts      # Error handling
 
@@ -49,7 +49,8 @@ test/
 ├── unit/
 │   ├── auth.test.ts         # Auth middleware tests
 │   ├── rateLimit.test.ts    # Rate limit middleware tests
-│   └── validate.test.ts     # Validation middleware tests
+│   ├── validate.test.ts     # Validation middleware tests
+│   └── queueConsumer.test.ts # Queue consumer tests
 └── integration/
-    └── tasks.test.ts        # Task API integration tests
+    └── tasks.test.ts        # Task API integration tests (includes queue tests)
 ```

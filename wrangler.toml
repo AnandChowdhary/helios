@@ -26,15 +26,15 @@ id = "0d19024897cd48d6bba3c88ddd01afae"
 # binding = "ARTIFACTS"
 # bucket_name = "helios-artifacts"
 
-# Queues (requires Workers Paid plan, then uncomment)
-# [[queues.producers]]
-# binding = "TASK_QUEUE"
-# queue = "helios-tasks"
+# Queues (Workers Paid plan enabled)
+[[queues.producers]]
+binding = "TASK_QUEUE"
+queue = "helios-tasks"
 
-# [[queues.consumers]]
-# queue = "helios-tasks"
-# max_batch_size = 1
-# max_batch_timeout = 30
+[[queues.consumers]]
+queue = "helios-tasks"
+max_batch_size = 1
+max_batch_timeout = 30
 
 # Containers (when available)
 # [containers]

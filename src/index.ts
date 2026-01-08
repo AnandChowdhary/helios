@@ -5,21 +5,22 @@ import { tasksRouter } from "./routes/tasks";
 import { authMiddleware } from "./middleware/auth";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { errorHandler } from "./utils/errors";
-import type { Env } from "./types";
+import { handleQueue } from "./queue/consumer";
+import type { Env, TaskQueueMessage } from "./types";
+
+const VERSION = "0.1.0";
 
 const app = new Hono<{ Bindings: Env }>();
 
-// Global middleware
 app.use("*", cors());
 app.use("*", logger());
 app.onError(errorHandler);
 
-// Public routes
 app.get("/health", (c) => {
   return c.json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    version: "0.1.0",
+    version: VERSION,
   });
 });
 
@@ -27,14 +28,18 @@ app.get("/", (c) => {
   return c.json({
     name: "Helios",
     description: "Cloud Claude Code API Service",
-    version: "0.1.0",
+    version: VERSION,
     docs: "https://github.com/AnandChowdhary/helios",
   });
 });
 
-// Protected routes
 app.use("/v1/*", authMiddleware);
 app.use("/v1/*", rateLimitMiddleware);
 app.route("/v1/tasks", tasksRouter);
 
-export default app;
+export default {
+  fetch: app.fetch,
+  queue(batch: MessageBatch<TaskQueueMessage>, env: Env): Promise<void> {
+    return handleQueue(batch, env);
+  },
+};
