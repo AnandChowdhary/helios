@@ -1990,7 +1990,7 @@ seedApiKeys().catch(console.error);
 
 - [x] Cancel task endpoint
 - [x] Logs and diff endpoints
-- [ ] E2E tests
+- [x] E2E tests
 - [ ] Staging deployment
 - [ ] Documentation
 - [ ] Production deployment

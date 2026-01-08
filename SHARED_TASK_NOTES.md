@@ -2,52 +2,57 @@
 
 ## Current State
 
-SSE streaming for sync mode is now implemented:
+E2E tests are now implemented. 102 tests passing total:
+- Unit tests: 58
+- Integration tests: 28
+- E2E tests: 16 (15 require staging env vars, 1 runs always)
 
-- Container server (`container/server.mjs`) exposes `/logs` endpoint for real-time SSE streaming
-- Worker (`src/routes/tasks.ts`) handles sync mode by starting container and proxying log stream
-- 101 tests passing
+## How to Run E2E Tests
 
-## How SSE Streaming Works
+E2E tests require environment variables to run against a deployed staging environment:
 
-Sync mode flow:
-1. POST /v1/tasks with `output.mode: "sync"` returns 200 with SSE stream
-2. Worker starts container via `startContainerTask()`
-3. Worker connects to container's `/logs` SSE endpoint
-4. Container streams log events as they happen
-5. On task completion, container sends `complete` event with result
-6. Worker stops container after streaming completes
+```bash
+STAGING_URL=https://helios-staging.workers.dev \
+STAGING_API_KEY=your-helios-api-key \
+ANTHROPIC_API_KEY=your-anthropic-api-key \
+npm run test:e2e
+```
 
-SSE Events:
-- `status` - Task status updates (starting, running)
-- `log` - Log messages from Claude Code
-- `message` - Claude Code output
-- `tool_use` - Tool usage events
-- `result` - Intermediate results
-- `complete` - Final result with success/failure
-- `error` - Error events
-- `timeout` - Stream timeout (10 min max)
+Without these env vars, E2E tests are skipped (shows helpful message about what to set).
 
-Async mode still works as before (returns 202, queues task).
+## E2E Test Coverage
+
+Tests in `test/e2e/full-flow.test.ts` cover:
+- Health check endpoints (`/health`, `/`)
+- Authentication (missing key, invalid key, valid key)
+- Task validation (empty prompt, invalid repo URL, invalid API key format)
+- Async task flow (create task, retrieve task, cancel task)
+- Sync task flow with SSE streaming
+- Rate limit headers
+
+Container integration tests (require full infrastructure):
+- Claude Code task execution with tool usage
+- Task timeout handling
 
 ## Key Files
 
 ```
-container/server.mjs      # HTTP server with /logs SSE endpoint
-src/routes/tasks.ts       # POST handler with sync mode SSE streaming
-src/container/runner.ts   # Container helpers including getContainerLogStream()
+test/e2e/full-flow.test.ts    # E2E tests
+container/server.mjs          # HTTP server with /logs SSE endpoint
+src/routes/tasks.ts           # POST handler with sync mode SSE streaming
+src/container/runner.ts       # Container helpers including getContainerLogStream()
 ```
 
 ## Next Priority Tasks
 
-1. **E2E Tests** - Add end-to-end tests against staging environment
-   - Test actual container deployment with real Claude Code
-
-2. **Production Deployment** - Deploy to Cloudflare and test
+1. **Staging Deployment** - Deploy to Cloudflare and run E2E tests
    - Set up KV namespaces, R2 bucket, Queue
    - Deploy container image to Cloudflare Container Registry
+   - Create staging API key and run E2E tests
 
-3. **Documentation** - Add usage examples and API docs
+2. **Documentation** - Add usage examples and API docs
+
+3. **Production Deployment** - Deploy to production after staging validation
 
 ## Notes
 
