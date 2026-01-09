@@ -42,6 +42,25 @@ interface CancelledBody {
   cancelledAt: string;
 }
 
+interface PushSuccessBody {
+  taskId: string;
+  success: true;
+  branch: string;
+  message: string;
+  pullRequest?: {
+    number: number;
+    url: string;
+    title: string;
+  };
+  pullRequestError?: string;
+}
+
+interface PushErrorBody {
+  taskId: string;
+  success: false;
+  error: string;
+}
+
 interface HealthBody {
   status: string;
   timestamp: string;
@@ -501,6 +520,364 @@ describe("Tasks API Integration", () => {
       expect(res.status).toBe(404);
       const body = (await res.json()) as ErrorBody;
       expect(body.error.message).toBe("Diff not found");
+    });
+  });
+
+  describe("POST /v1/tasks/:id/push", () => {
+    const validPushPayload = {
+      branch: "helios/fix-auth-tests",
+      credentials: {
+        type: "token",
+        value: "ghp_test_token_123",
+      },
+      createPR: false,
+    };
+
+    it("returns 404 for non-existent task", async () => {
+      const env = createMockEnv();
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks/non-existent/push", {
+          method: "POST",
+          body: JSON.stringify(validPushPayload),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(404);
+      const body = (await res.json()) as ErrorBody;
+      expect(body.error.message).toBe("Task not found");
+    });
+
+    it("rejects push for pending task", async () => {
+      const env = createMockEnv();
+      const task: Task = {
+        id: "task_123",
+        status: "pending",
+        prompt: "Test prompt",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+      };
+      mockTasksKV.set("task_123", JSON.stringify(task));
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks/task_123/push", {
+          method: "POST",
+          body: JSON.stringify(validPushPayload),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as ErrorBody;
+      expect(body.error.message).toContain(
+        "Cannot push changes for task with status: pending",
+      );
+    });
+
+    it("rejects push for running task", async () => {
+      const env = createMockEnv();
+      const task: Task = {
+        id: "task_123",
+        status: "running",
+        prompt: "Test prompt",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+      };
+      mockTasksKV.set("task_123", JSON.stringify(task));
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks/task_123/push", {
+          method: "POST",
+          body: JSON.stringify(validPushPayload),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as ErrorBody;
+      expect(body.error.message).toContain(
+        "Cannot push changes for task with status: running",
+      );
+    });
+
+    it("rejects push for failed task", async () => {
+      const env = createMockEnv();
+      const task: Task = {
+        id: "task_123",
+        status: "failed",
+        prompt: "Test prompt",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        error: "Something went wrong",
+      };
+      mockTasksKV.set("task_123", JSON.stringify(task));
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks/task_123/push", {
+          method: "POST",
+          body: JSON.stringify(validPushPayload),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as ErrorBody;
+      expect(body.error.message).toContain(
+        "Cannot push changes for task with status: failed",
+      );
+    });
+
+    it("allows push for completed task", async () => {
+      const env = createMockEnv();
+      const task: Task = {
+        id: "task_123",
+        status: "completed",
+        prompt: "Test prompt",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        result: {
+          success: true,
+          summary: "Task completed",
+          filesChanged: [],
+          usage: { inputTokens: 100, outputTokens: 50 },
+        },
+      };
+      mockTasksKV.set("task_123", JSON.stringify(task));
+
+      // Mock the container fetch to return a successful push result
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            success: true,
+            branch: "helios/fix-auth-tests",
+            pushed: true,
+            message: "Successfully pushed to branch: helios/fix-auth-tests",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+      env.CLAUDE_RUNNER = {
+        idFromName: vi.fn((name: string) => ({ toString: () => name })),
+        get: vi.fn(() => ({
+          startAndWaitForPorts: vi.fn(),
+          getState: vi.fn(),
+          fetch: mockFetch,
+          stop: vi.fn(),
+        })),
+        newUniqueId: vi.fn(),
+        idFromString: vi.fn(),
+        jurisdiction: vi.fn(),
+      } as unknown as DurableObjectNamespace;
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks/task_123/push", {
+          method: "POST",
+          body: JSON.stringify(validPushPayload),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as PushSuccessBody;
+      expect(body.success).toBe(true);
+      expect(body.branch).toBe("helios/fix-auth-tests");
+      expect(body.taskId).toBe("task_123");
+    });
+
+    it("validates branch name", async () => {
+      const env = createMockEnv();
+      const task: Task = {
+        id: "task_123",
+        status: "completed",
+        prompt: "Test prompt",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      };
+      mockTasksKV.set("task_123", JSON.stringify(task));
+
+      const invalidPayload = {
+        ...validPushPayload,
+        branch: "invalid branch with spaces!",
+      };
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks/task_123/push", {
+          method: "POST",
+          body: JSON.stringify(invalidPayload),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(400);
+    });
+
+    it("requires credentials", async () => {
+      const env = createMockEnv();
+      const task: Task = {
+        id: "task_123",
+        status: "completed",
+        prompt: "Test prompt",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      };
+      mockTasksKV.set("task_123", JSON.stringify(task));
+
+      const payloadWithoutCredentials = {
+        branch: "helios/fix-auth-tests",
+      };
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks/task_123/push", {
+          method: "POST",
+          body: JSON.stringify(payloadWithoutCredentials),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns error when container push fails", async () => {
+      const env = createMockEnv();
+      const task: Task = {
+        id: "task_123",
+        status: "completed",
+        prompt: "Test prompt",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        result: {
+          success: true,
+          summary: "Task completed",
+          filesChanged: [],
+          usage: { inputTokens: 100, outputTokens: 50 },
+        },
+      };
+      mockTasksKV.set("task_123", JSON.stringify(task));
+
+      // Mock the container fetch to return an error
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: "Failed to push: authentication failed",
+          }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+      env.CLAUDE_RUNNER = {
+        idFromName: vi.fn((name: string) => ({ toString: () => name })),
+        get: vi.fn(() => ({
+          startAndWaitForPorts: vi.fn(),
+          getState: vi.fn(),
+          fetch: mockFetch,
+          stop: vi.fn(),
+        })),
+        newUniqueId: vi.fn(),
+        idFromString: vi.fn(),
+        jurisdiction: vi.fn(),
+      } as unknown as DurableObjectNamespace;
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks/task_123/push", {
+          method: "POST",
+          body: JSON.stringify(validPushPayload),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(500);
+      const body = (await res.json()) as PushErrorBody;
+      expect(body.success).toBe(false);
+      expect(body.error).toContain("Failed to push");
+    });
+
+    it("includes PR options in request to container", async () => {
+      const env = createMockEnv();
+      const task: Task = {
+        id: "task_123",
+        status: "completed",
+        prompt: "Test prompt",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        result: {
+          success: true,
+          summary: "Task completed",
+          filesChanged: [],
+          usage: { inputTokens: 100, outputTokens: 50 },
+        },
+      };
+      mockTasksKV.set("task_123", JSON.stringify(task));
+
+      const mockFetch = vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            success: true,
+            branch: "helios/fix-auth-tests",
+            pushed: true,
+            message: "Successfully pushed",
+            pullRequest: {
+              number: 42,
+              url: "https://github.com/user/repo/pull/42",
+              title: "Fix auth tests",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+      env.CLAUDE_RUNNER = {
+        idFromName: vi.fn((name: string) => ({ toString: () => name })),
+        get: vi.fn(() => ({
+          startAndWaitForPorts: vi.fn(),
+          getState: vi.fn(),
+          fetch: mockFetch,
+          stop: vi.fn(),
+        })),
+        newUniqueId: vi.fn(),
+        idFromString: vi.fn(),
+        jurisdiction: vi.fn(),
+      } as unknown as DurableObjectNamespace;
+
+      const pushPayloadWithPR = {
+        branch: "helios/fix-auth-tests",
+        credentials: {
+          type: "token",
+          value: "ghp_test_token_123",
+        },
+        createPR: true,
+        prTitle: "Fix auth tests",
+        prBody: "This PR fixes the auth tests",
+      };
+
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks/task_123/push", {
+          method: "POST",
+          body: JSON.stringify(pushPayloadWithPR),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(200);
+
+      // Verify the fetch was called with correct body
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const fetchCall = mockFetch.mock.calls[0][0] as Request;
+      const fetchBody = JSON.parse(await fetchCall.text());
+      expect(fetchBody.createPR).toBe(true);
+      expect(fetchBody.prTitle).toBe("Fix auth tests");
+      expect(fetchBody.prBody).toBe("This PR fixes the auth tests");
+
+      const body = (await res.json()) as PushSuccessBody;
+      expect(body.pullRequest).toBeDefined();
+      expect(body.pullRequest?.number).toBe(42);
+      expect(body.pullRequest?.url).toBe(
+        "https://github.com/user/repo/pull/42",
+      );
     });
   });
 
