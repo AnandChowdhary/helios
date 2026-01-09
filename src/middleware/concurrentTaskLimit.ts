@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
-import { HTTPException } from "hono/http-exception";
 import type { Env, ApiKey } from "../types";
+import { createError, ErrorCodes } from "../utils/errors";
 
 const DEFAULT_CONCURRENT_TASK_LIMIT = 5;
 
@@ -82,9 +82,11 @@ export const concurrentTaskLimitMiddleware = createMiddleware<{
   }
 
   if (currentCount >= limit) {
-    throw new HTTPException(429, {
-      message: `Concurrent task limit exceeded. You have ${currentCount} active tasks (limit: ${limit}). Please wait for tasks to complete before starting new ones.`,
-    });
+    throw createError(
+      ErrorCodes.CONCURRENT_LIMIT_EXCEEDED,
+      `Concurrent task limit exceeded. You have ${currentCount} active tasks (limit: ${limit}). Please wait for tasks to complete before starting new ones.`,
+      { currentCount, limit },
+    );
   }
 
   await next();

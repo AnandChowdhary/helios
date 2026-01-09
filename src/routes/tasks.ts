@@ -25,6 +25,7 @@ import {
   trackTaskCompleted,
 } from "../services/usage";
 import { addTaskToIndex, listTasks } from "../services/taskIndex";
+import { errorResponse, ErrorCodes } from "../utils/errors";
 
 export const tasksRouter = new Hono<{ Bindings: Env }>();
 
@@ -55,11 +56,11 @@ tasksRouter.get("/", async (c) => {
       !validStatuses.includes(statusParam as (typeof validStatuses)[number])
     ) {
       return c.json(
-        {
-          error: {
-            message: `Invalid status filter. Must be one of: ${validStatuses.join(", ")}`,
-          },
-        },
+        errorResponse(
+          ErrorCodes.VALIDATION_INVALID_PARAM,
+          `Invalid status filter. Must be one of: ${validStatuses.join(", ")}`,
+          { parameter: "status", value: statusParam },
+        ),
         400,
       );
     }
@@ -69,22 +70,22 @@ tasksRouter.get("/", async (c) => {
   // Validate limit and offset
   if (isNaN(limit) || limit < 1 || limit > 100) {
     return c.json(
-      {
-        error: {
-          message: "limit must be a number between 1 and 100",
-        },
-      },
+      errorResponse(
+        ErrorCodes.VALIDATION_INVALID_PARAM,
+        "limit must be a number between 1 and 100",
+        { parameter: "limit", value: limitParam },
+      ),
       400,
     );
   }
 
   if (isNaN(offset) || offset < 0) {
     return c.json(
-      {
-        error: {
-          message: "offset must be a non-negative number",
-        },
-      },
+      errorResponse(
+        ErrorCodes.VALIDATION_INVALID_PARAM,
+        "offset must be a non-negative number",
+        { parameter: "offset", value: offsetParam },
+      ),
       400,
     );
   }
@@ -288,7 +289,7 @@ tasksRouter.post(
           await stream.writeSSE({
             event: "error",
             data: JSON.stringify({
-              code: "STREAM_ERROR",
+              code: ErrorCodes.STREAM_ERROR,
               message: "Failed to connect to container log stream",
             }),
           });
@@ -321,7 +322,7 @@ tasksRouter.post(
         await stream.writeSSE({
           event: "error",
           data: JSON.stringify({
-            code: "TASK_ERROR",
+            code: ErrorCodes.TASK_EXECUTION_FAILED,
             message: errorMessage,
           }),
         });
@@ -353,7 +354,7 @@ tasksRouter.get("/:id", async (c) => {
   const task = await c.env.TASKS.get<Task>(taskId, "json");
 
   if (!task) {
-    return c.json({ error: { message: "Task not found" } }, 404);
+    return c.json(errorResponse(ErrorCodes.TASK_NOT_FOUND), 404);
   }
 
   return c.json(task);
@@ -364,11 +365,18 @@ tasksRouter.post("/:id/cancel", async (c) => {
   const task = await c.env.TASKS.get<Task>(taskId, "json");
 
   if (!task) {
-    return c.json({ error: { message: "Task not found" } }, 404);
+    return c.json(errorResponse(ErrorCodes.TASK_NOT_FOUND), 404);
   }
 
   if (task.status !== "pending" && task.status !== "running") {
-    return c.json({ error: { message: "Task cannot be cancelled" } }, 400);
+    return c.json(
+      errorResponse(
+        ErrorCodes.TASK_NOT_CANCELLABLE,
+        `Task cannot be cancelled. Current status: ${task.status}`,
+        { currentStatus: task.status },
+      ),
+      400,
+    );
   }
 
   task.status = "cancelled";
@@ -387,13 +395,13 @@ tasksRouter.get("/:id/logs", async (c) => {
   const task = await c.env.TASKS.get<Task>(taskId, "json");
 
   if (!task) {
-    return c.json({ error: { message: "Task not found" } }, 404);
+    return c.json(errorResponse(ErrorCodes.TASK_NOT_FOUND), 404);
   }
 
   const logs = await c.env.ARTIFACTS.get(`${taskId}/logs.txt`);
 
   if (!logs) {
-    return c.json({ error: { message: "Logs not found" } }, 404);
+    return c.json(errorResponse(ErrorCodes.LOGS_NOT_FOUND), 404);
   }
 
   return new Response(logs.body, {
@@ -406,13 +414,13 @@ tasksRouter.get("/:id/diff", async (c) => {
   const task = await c.env.TASKS.get<Task>(taskId, "json");
 
   if (!task) {
-    return c.json({ error: { message: "Task not found" } }, 404);
+    return c.json(errorResponse(ErrorCodes.TASK_NOT_FOUND), 404);
   }
 
   const diff = await c.env.ARTIFACTS.get(`${taskId}/diff.patch`);
 
   if (!diff) {
-    return c.json({ error: { message: "Diff not found" } }, 404);
+    return c.json(errorResponse(ErrorCodes.DIFF_NOT_FOUND), 404);
   }
 
   return new Response(diff.body, {
@@ -427,17 +435,17 @@ tasksRouter.post("/:id/push", validateBody(PushTaskSchema), async (c) => {
   const task = await c.env.TASKS.get<Task>(taskId, "json");
 
   if (!task) {
-    return c.json({ error: { message: "Task not found" } }, 404);
+    return c.json(errorResponse(ErrorCodes.TASK_NOT_FOUND), 404);
   }
 
   // Only allow push for completed tasks
   if (task.status !== "completed") {
     return c.json(
-      {
-        error: {
-          message: `Cannot push changes for task with status: ${task.status}. Task must be completed first.`,
-        },
-      },
+      errorResponse(
+        ErrorCodes.PUSH_NOT_COMPLETED,
+        `Cannot push changes for task with status: ${task.status}. Task must be completed first.`,
+        { currentStatus: task.status },
+      ),
       400,
     );
   }
@@ -454,9 +462,9 @@ tasksRouter.post("/:id/push", validateBody(PushTaskSchema), async (c) => {
   if (!result.success) {
     return c.json(
       {
+        ...errorResponse(ErrorCodes.PUSH_FAILED, result.error),
         taskId,
         success: false,
-        error: result.error,
       },
       500,
     );

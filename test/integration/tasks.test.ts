@@ -19,9 +19,10 @@ vi.mock("@cloudflare/containers", () => ({
 import app from "../../src/index";
 import type { Env, Task, ApiKey } from "../../src/types";
 import { hashApiKey } from "../../src/middleware/auth";
+import { ErrorCodes } from "../../src/utils/errors";
 
 interface ErrorBody {
-  error: { message: string };
+  error: { code: string; message: string };
 }
 
 interface TaskCreatedBody {
@@ -58,7 +59,7 @@ interface PushSuccessBody {
 interface PushErrorBody {
   taskId: string;
   success: false;
-  error: string;
+  error: { code: string; message: string };
 }
 
 interface TaskListBody {
@@ -291,7 +292,7 @@ describe("Tasks API Integration", () => {
 
       expect(res.status).toBe(400);
       const body = (await res.json()) as ErrorBody;
-      expect(body.error.message).toBe("Validation failed");
+      expect(body.error.code).toBe(ErrorCodes.VALIDATION_FAILED);
     });
 
     it("rejects invalid repository URLs", async () => {
@@ -357,7 +358,7 @@ describe("Tasks API Integration", () => {
 
       expect(res.status).toBe(404);
       const body = (await res.json()) as ErrorBody;
-      expect(body.error.message).toBe("Task not found");
+      expect(body.error.code).toBe(ErrorCodes.TASK_NOT_FOUND);
     });
 
     it("requires authentication", async () => {
@@ -668,7 +669,7 @@ describe("Tasks API Integration", () => {
 
       expect(res.status).toBe(400);
       const body = (await res.json()) as ErrorBody;
-      expect(body.error.message).toBe("Task cannot be cancelled");
+      expect(body.error.code).toBe(ErrorCodes.TASK_NOT_CANCELLABLE);
     });
 
     it("returns 404 for non-existent task", async () => {
@@ -739,7 +740,7 @@ describe("Tasks API Integration", () => {
 
       expect(res.status).toBe(404);
       const body = (await res.json()) as ErrorBody;
-      expect(body.error.message).toBe("Logs not found");
+      expect(body.error.code).toBe(ErrorCodes.LOGS_NOT_FOUND);
     });
   });
 
@@ -772,7 +773,7 @@ describe("Tasks API Integration", () => {
 
       expect(res.status).toBe(404);
       const body = (await res.json()) as ErrorBody;
-      expect(body.error.message).toBe("Diff not found");
+      expect(body.error.code).toBe(ErrorCodes.DIFF_NOT_FOUND);
     });
   });
 
@@ -798,7 +799,7 @@ describe("Tasks API Integration", () => {
 
       expect(res.status).toBe(404);
       const body = (await res.json()) as ErrorBody;
-      expect(body.error.message).toBe("Task not found");
+      expect(body.error.code).toBe(ErrorCodes.TASK_NOT_FOUND);
     });
 
     it("rejects push for pending task", async () => {
@@ -1046,7 +1047,8 @@ describe("Tasks API Integration", () => {
       expect(res.status).toBe(500);
       const body = (await res.json()) as PushErrorBody;
       expect(body.success).toBe(false);
-      expect(body.error).toContain("Failed to push");
+      expect(body.error.code).toBe(ErrorCodes.PUSH_FAILED);
+      expect(body.error.message).toContain("Failed to push");
     });
 
     it("includes PR options in request to container", async () => {

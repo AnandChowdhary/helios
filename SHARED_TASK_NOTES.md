@@ -2,7 +2,7 @@
 
 ## Current State
 
-**All SPEC.md phases complete + task listing added.** All Phase 1, Phase 2, and Phase 3 items are checked off.
+**All SPEC.md phases complete + structured error codes added.** All Phase 1, Phase 2, and Phase 3 items are checked off.
 
 **Verified on 2026-01-09:** All 190 tests pass, TypeScript type checking passes, ESLint passes.
 
@@ -16,20 +16,20 @@
 
 ## Recent Changes (2026-01-09)
 
-Added **GET /v1/tasks** endpoint for listing tasks with pagination and status filtering:
+Added **structured error codes** for programmatic error handling:
 
-- Lists tasks for authenticated API key in reverse chronological order
-- Supports `limit`, `offset`, and `status` query parameters
-- Uses secondary index in KV for efficient lookups
-- Both TypeScript and Python SDKs updated with `listTasks()`/`list_tasks()` methods
-- 9 new integration tests added
-- SPEC.md updated with endpoint documentation
+- All errors now return a `code` field (e.g., `AUTH_MISSING_KEY`, `TASK_NOT_FOUND`)
+- Error codes defined in `src/utils/error-codes.ts`
+- Helper functions `createError()` and `errorResponse()` in `src/utils/errors.ts`
+- All middleware and route handlers updated to use error codes
+- SPEC.md updated with error codes documentation table
+- Tests updated to verify error codes instead of error messages
 
 ## Potential Future Enhancements
 
 From the codebase exploration, here are high-priority improvements:
 
-1. **Structured error codes**: Replace generic errors with domain-specific codes
+1. ~~**Structured error codes**: Replace generic errors with domain-specific codes~~ (Done!)
 2. **Webhook retry mechanism**: Add exponential backoff for failed webhooks
 3. **SDK retry logic**: Automatic exponential backoff for transient failures
 4. **Real-time log streaming**: Stream logs to R2 during execution, not just after
@@ -41,3 +41,4 @@ From the codebase exploration, here are high-priority improvements:
 - Index automatically cleans up expired/deleted task IDs on read
 - Usage data expires after 90 days in KV
 - Dashboard uses vanilla HTML/CSS/JS (no build step)
+- Error codes are exported from `src/utils/errors.ts` for SDK use

@@ -2,10 +2,10 @@ import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { rateLimitMiddleware } from "../../src/middleware/rateLimit";
 import type { ApiKey, Env } from "../../src/types";
-import { errorHandler } from "../../src/utils/errors";
+import { errorHandler, ErrorCodes } from "../../src/utils/errors";
 
 interface ErrorBody {
-  error: { message: string };
+  error: { code: string; message: string };
 }
 
 interface SuccessBody {
@@ -109,7 +109,7 @@ describe("rateLimitMiddleware", () => {
 
     expect(res.status).toBe(429);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Rate limit exceeded");
+    expect(body.error.code).toBe(ErrorCodes.RATE_LIMIT_EXCEEDED);
   });
 
   it("stores request count in KV with TTL", async () => {
