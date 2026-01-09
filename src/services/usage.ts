@@ -62,9 +62,7 @@ export async function getDailyUsage(
 async function updateDailyUsage(
   env: Env,
   apiKeyId: string,
-  updates: Partial<
-    Omit<DailyUsage, "apiKeyId" | "date"> & { date?: string }
-  >,
+  updates: Partial<Omit<DailyUsage, "apiKeyId" | "date"> & { date?: string }>,
 ): Promise<void> {
   const date = updates.date ?? getDateKey();
   const key = getUsageKey(apiKeyId, date);
@@ -147,7 +145,10 @@ export async function trackTaskCompleted(
 /**
  * Calculate estimated cost based on token usage
  */
-export function calculateCost(inputTokens: number, outputTokens: number): number {
+export function calculateCost(
+  inputTokens: number,
+  outputTokens: number,
+): number {
   const inputCost = (inputTokens / 1_000_000) * INPUT_TOKEN_COST_PER_MILLION;
   const outputCost = (outputTokens / 1_000_000) * OUTPUT_TOKEN_COST_PER_MILLION;
   return Math.round((inputCost + outputCost) * 100) / 100; // Round to 2 decimal places

@@ -475,7 +475,7 @@ Use `--dangerously-skip-permissions` only because:
 - [x] WebSocket streaming
 - [x] Concurrent task limits per account
 - [x] Usage tracking and billing
-- [ ] Dashboard UI (optional)
+- [x] Dashboard UI (optional)
 - [x] SDK clients (TypeScript)
 - [x] SDK clients (Python)
 

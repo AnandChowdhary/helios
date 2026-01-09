@@ -2,39 +2,24 @@
 
 ## Current State
 
-**All Phases Complete** (Phase 1, Phase 2, Phase 3) - only the optional Dashboard UI remains.
+**All tasks complete!** All Phase 1, Phase 2, and Phase 3 items from SPEC.md are now checked off, including the Dashboard UI.
 
 **Deployed URLs:**
 
 - **Production**: https://helios.getelysium.workers.dev
 - **Staging**: https://helios-staging.getelysium.workers.dev
+- **Dashboard**: https://helios.getelysium.workers.dev/dashboard
 
-**Test Suite:** 172 tests (all passing)
+**Test Suite:** 179 tests (all passing)
 
-## What's Done
+## Dashboard UI
 
-All core features complete:
+The dashboard is available at `/dashboard` and provides:
 
-- Core API (task creation, status, cancel, logs, diff, push)
-- Authentication and rate limiting
-- Concurrent task limits per account
-- KV storage for task metadata
-- R2 storage for artifacts
-- Queue integration for async tasks
-- SSE streaming for sync mode
-- WebSocket streaming
-- Webhook notifications
-- Push-to-remote with PR creation
-- Container Dockerfile and entrypoint
-- Comprehensive test suite (172 tests)
-- CI/CD pipelines
-- TypeScript SDK (sdk/typescript/)
-- Python SDK (sdk/python/)
-- Usage tracking and billing
-
-## Remaining Task
-
-- Dashboard UI (optional) - The only unchecked item in SPEC.md
+- API key-based authentication (stored in localStorage)
+- Task status viewing with logs and diffs
+- Usage tracking with daily charts
+- Cost estimation display
 
 ## Before Deploying Updates
 
@@ -52,6 +37,7 @@ wrangler kv:namespace create USAGE --env staging
 
 ## Notes
 
-- All SPEC.md checkboxes are now updated to reflect actual completion status
+- All SPEC.md checkboxes are now complete
 - Usage data expires after 90 days in KV
 - Cost calculation uses Claude Sonnet 4.5 pricing ($3/1M input, $15/1M output)
+- Dashboard uses vanilla HTML/CSS/JS served via Hono's html() helper (no build step required)
