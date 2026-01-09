@@ -24,8 +24,74 @@ import {
   trackTaskCreated,
   trackTaskCompleted,
 } from "../services/usage";
+import { addTaskToIndex, listTasks } from "../services/taskIndex";
 
 export const tasksRouter = new Hono<{ Bindings: Env }>();
+
+// GET /v1/tasks - List tasks for the authenticated API key
+tasksRouter.get("/", async (c) => {
+  const apiKey = c.get("apiKey") as ApiKey;
+
+  // Parse query parameters
+  const limitParam = c.req.query("limit");
+  const offsetParam = c.req.query("offset");
+  const statusParam = c.req.query("status");
+
+  const limit = limitParam ? parseInt(limitParam, 10) : 20;
+  const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
+
+  // Validate status parameter if provided
+  const validStatuses = [
+    "pending",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+  ] as const;
+  let status: (typeof validStatuses)[number] | undefined;
+
+  if (statusParam) {
+    if (
+      !validStatuses.includes(statusParam as (typeof validStatuses)[number])
+    ) {
+      return c.json(
+        {
+          error: {
+            message: `Invalid status filter. Must be one of: ${validStatuses.join(", ")}`,
+          },
+        },
+        400,
+      );
+    }
+    status = statusParam as (typeof validStatuses)[number];
+  }
+
+  // Validate limit and offset
+  if (isNaN(limit) || limit < 1 || limit > 100) {
+    return c.json(
+      {
+        error: {
+          message: "limit must be a number between 1 and 100",
+        },
+      },
+      400,
+    );
+  }
+
+  if (isNaN(offset) || offset < 0) {
+    return c.json(
+      {
+        error: {
+          message: "offset must be a non-negative number",
+        },
+      },
+      400,
+    );
+  }
+
+  const result = await listTasks(c.env, apiKey.id, { limit, offset, status });
+  return c.json(result);
+});
 
 tasksRouter.post(
   "/",
@@ -58,6 +124,9 @@ tasksRouter.post(
     await c.env.TASKS.put(taskId, JSON.stringify(task), {
       expirationTtl: 86400 * 7,
     });
+
+    // Add task to the API key's task index for listing
+    await addTaskToIndex(c.env, apiKey.id, taskId);
 
     const outputMode = input.output?.mode ?? "sync";
 

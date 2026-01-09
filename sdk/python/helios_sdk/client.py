@@ -14,23 +14,21 @@ import httpx
 from .types import (
     AsyncTaskResponse,
     CancelTaskResponse,
-    ClaudeConfig,
     CreateAsyncTaskInput,
     CreateStreamTaskInput,
     FileChange,
     HeliosConfig,
+    ListTasksOptions,
     PullRequestInfo,
     PushTaskInput,
     PushTaskResponse,
-    Repository,
-    RepositoryCredentials,
     RepositoryInfo,
     SSEEvent,
     Task,
-    TaskOptions,
+    TaskListPagination,
+    TaskListResponse,
     TaskResult,
     TokenUsage,
-    WebhookConfig,
 )
 
 
@@ -135,6 +133,19 @@ def _parse_task(data: dict) -> Task:
         error=data.get("error"),
         container_id=data.get("containerId"),
     )
+
+
+def _parse_task_list_response(data: dict) -> TaskListResponse:
+    """Parse task list response from API."""
+    tasks = [_parse_task(t) for t in data.get("tasks", [])]
+    pagination_data = data.get("pagination", {})
+    pagination = TaskListPagination(
+        total=pagination_data.get("total", 0),
+        limit=pagination_data.get("limit", 20),
+        offset=pagination_data.get("offset", 0),
+        has_more=pagination_data.get("hasMore", False),
+    )
+    return TaskListResponse(tasks=tasks, pagination=pagination)
 
 
 def _parse_sse_lines(lines: List[str]) -> Iterator[SSEEvent]:
@@ -345,6 +356,53 @@ class HeliosClient:
         """
         data = self._request("GET", f"/v1/tasks/{task_id}")
         return _parse_task(data)
+
+    def list_tasks(
+        self,
+        options: Optional[ListTasksOptions] = None,
+    ) -> TaskListResponse:
+        """List tasks for the authenticated API key.
+
+        Returns tasks in reverse chronological order (newest first).
+
+        Args:
+            options: Listing options (pagination and filtering).
+
+        Returns:
+            Task list with pagination info.
+
+        Example:
+            >>> # Get the first 10 tasks
+            >>> result = client.list_tasks(ListTasksOptions(limit=10))
+            >>> print(f"Found {result.pagination.total} tasks")
+            >>>
+            >>> # Filter by status
+            >>> completed = client.list_tasks(ListTasksOptions(status="completed"))
+            >>>
+            >>> # Paginate through all tasks
+            >>> offset = 0
+            >>> while True:
+            ...     page = client.list_tasks(ListTasksOptions(limit=20, offset=offset))
+            ...     for task in page.tasks:
+            ...         print(task.id, task.status)
+            ...     if not page.pagination.has_more:
+            ...         break
+            ...     offset += len(page.tasks)
+        """
+        params: Dict[str, str] = {}
+        if options:
+            if options.limit != 20:
+                params["limit"] = str(options.limit)
+            if options.offset != 0:
+                params["offset"] = str(options.offset)
+            if options.status:
+                params["status"] = options.status
+
+        query_string = "&".join(f"{k}={v}" for k, v in params.items())
+        path = f"/v1/tasks?{query_string}" if query_string else "/v1/tasks"
+
+        data = self._request("GET", path)
+        return _parse_task_list_response(data)
 
     def cancel_task(self, task_id: str) -> CancelTaskResponse:
         """Cancel a running or pending task.
@@ -676,6 +734,35 @@ class AsyncHeliosClient:
         """
         data = await self._request("GET", f"/v1/tasks/{task_id}")
         return _parse_task(data)
+
+    async def list_tasks(
+        self,
+        options: Optional[ListTasksOptions] = None,
+    ) -> TaskListResponse:
+        """List tasks for the authenticated API key.
+
+        Returns tasks in reverse chronological order (newest first).
+
+        Args:
+            options: Listing options (pagination and filtering).
+
+        Returns:
+            Task list with pagination info.
+        """
+        params: Dict[str, str] = {}
+        if options:
+            if options.limit != 20:
+                params["limit"] = str(options.limit)
+            if options.offset != 0:
+                params["offset"] = str(options.offset)
+            if options.status:
+                params["status"] = options.status
+
+        query_string = "&".join(f"{k}={v}" for k, v in params.items())
+        path = f"/v1/tasks?{query_string}" if query_string else "/v1/tasks"
+
+        data = await self._request("GET", path)
+        return _parse_task_list_response(data)
 
     async def cancel_task(self, task_id: str) -> CancelTaskResponse:
         """Cancel a running or pending task.

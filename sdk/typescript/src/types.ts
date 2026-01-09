@@ -311,3 +311,39 @@ export interface CreateStreamTaskInput {
   /** Task execution options */
   options?: TaskOptions;
 }
+
+/**
+ * Options for listing tasks
+ */
+export interface ListTasksOptions {
+  /** Maximum number of tasks to return (1-100, defaults to 20) */
+  limit?: number;
+  /** Number of tasks to skip (defaults to 0) */
+  offset?: number;
+  /** Filter by task status */
+  status?: TaskStatus;
+}
+
+/**
+ * Pagination information for task listing
+ */
+export interface TaskListPagination {
+  /** Total number of tasks matching the filter */
+  total: number;
+  /** Limit used in the query */
+  limit: number;
+  /** Offset used in the query */
+  offset: number;
+  /** Whether there are more tasks to fetch */
+  hasMore: boolean;
+}
+
+/**
+ * Response from listing tasks
+ */
+export interface TaskListResponse {
+  /** Array of tasks */
+  tasks: Task[];
+  /** Pagination information */
+  pagination: TaskListPagination;
+}

@@ -131,6 +131,30 @@ export interface WebSocketClientMessage {
 }
 
 /**
+ * Task index entry stored for each API key
+ * Stored in TASKS KV with key: index:{apiKeyId}
+ * Contains array of task IDs in reverse chronological order (newest first)
+ */
+export interface TaskIndex {
+  apiKeyId: string;
+  taskIds: string[]; // Task IDs in reverse chronological order
+  updatedAt: string; // ISO timestamp of last update
+}
+
+/**
+ * Response for listing tasks
+ */
+export interface TaskListResponse {
+  tasks: Task[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+}
+
+/**
  * Daily usage metrics aggregated per API key
  * Stored in USAGE KV with key: {apiKeyId}:{YYYY-MM-DD}
  */

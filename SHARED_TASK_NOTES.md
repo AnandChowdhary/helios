@@ -2,9 +2,9 @@
 
 ## Current State
 
-**All tasks complete!** All Phase 1, Phase 2, and Phase 3 items from SPEC.md are now checked off, including the Dashboard UI.
+**All SPEC.md phases complete + task listing added.** All Phase 1, Phase 2, and Phase 3 items are checked off.
 
-**Verified on 2026-01-08:** All 179 tests pass, TypeScript type checking passes, ESLint passes.
+**Verified on 2026-01-09:** All 190 tests pass, TypeScript type checking passes, ESLint passes.
 
 **Deployed URLs:**
 
@@ -12,34 +12,32 @@
 - **Staging**: https://helios-staging.getelysium.workers.dev
 - **Dashboard**: https://helios.getelysium.workers.dev/dashboard
 
-**Test Suite:** 179 tests (all passing)
+**Test Suite:** 190 tests (all passing)
 
-## Dashboard UI
+## Recent Changes (2026-01-09)
 
-The dashboard is available at `/dashboard` and provides:
+Added **GET /v1/tasks** endpoint for listing tasks with pagination and status filtering:
 
-- API key-based authentication (stored in localStorage)
-- Task status viewing with logs and diffs
-- Usage tracking with daily charts
-- Cost estimation display
+- Lists tasks for authenticated API key in reverse chronological order
+- Supports `limit`, `offset`, and `status` query parameters
+- Uses secondary index in KV for efficient lookups
+- Both TypeScript and Python SDKs updated with `listTasks()`/`list_tasks()` methods
+- 9 new integration tests added
+- SPEC.md updated with endpoint documentation
 
-## Before Deploying Updates
+## Potential Future Enhancements
 
-The USAGE KV namespace needs to be created if not already done:
+From the codebase exploration, here are high-priority improvements:
 
-```bash
-# Production
-wrangler kv:namespace create USAGE
-# Update wrangler.toml with the returned ID
-
-# Staging
-wrangler kv:namespace create USAGE --env staging
-# Update wrangler.toml env.staging section with the returned ID
-```
+1. **Structured error codes**: Replace generic errors with domain-specific codes
+2. **Webhook retry mechanism**: Add exponential backoff for failed webhooks
+3. **SDK retry logic**: Automatic exponential backoff for transient failures
+4. **Real-time log streaming**: Stream logs to R2 during execution, not just after
+5. **Rate limit info endpoint**: Let clients query their current rate limit status
 
 ## Notes
 
-- All SPEC.md checkboxes are now complete
+- Task index stored in KV with key `index:{apiKeyId}`, max 1000 task IDs per key
+- Index automatically cleans up expired/deleted task IDs on read
 - Usage data expires after 90 days in KV
-- Cost calculation uses Claude Sonnet 4.5 pricing ($3/1M input, $15/1M output)
-- Dashboard uses vanilla HTML/CSS/JS served via Hono's html() helper (no build step required)
+- Dashboard uses vanilla HTML/CSS/JS (no build step)
