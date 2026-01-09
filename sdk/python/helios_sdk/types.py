@@ -222,6 +222,22 @@ class SSEEvent:
 
 
 @dataclass
+class RetryConfig:
+    """Retry configuration for automatic exponential backoff."""
+
+    max_retries: int = 3
+    """Maximum number of retry attempts (default: 3)."""
+    initial_delay_ms: int = 1000
+    """Initial delay in milliseconds before first retry (default: 1000)."""
+    max_delay_ms: int = 10000
+    """Maximum delay in milliseconds between retries (default: 10000)."""
+    backoff_multiplier: float = 2.0
+    """Backoff multiplier (default: 2)."""
+    retry_on_rate_limit: bool = True
+    """Whether to retry on rate limit errors (429) (default: True)."""
+
+
+@dataclass
 class HeliosConfig:
     """Helios client configuration."""
 
@@ -229,6 +245,8 @@ class HeliosConfig:
     """Helios API key."""
     base_url: str = "https://helios.getelysium.workers.dev"
     """Base URL (defaults to production)."""
+    retry: Optional[RetryConfig] = None
+    """Retry configuration for transient failures. Set to RetryConfig() to enable with defaults, or None to disable."""
 
 
 @dataclass

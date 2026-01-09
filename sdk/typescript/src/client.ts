@@ -12,14 +12,27 @@ import type {
   APIError,
   ListTasksOptions,
   TaskListResponse,
+  RetryConfig,
 } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://helios.getelysium.workers.dev";
+
+/** Default retry configuration */
+const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
+  maxRetries: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 10000,
+  backoffMultiplier: 2,
+  retryOnRateLimit: true,
+};
 
 /**
  * Error thrown by the Helios SDK
  */
 export class HeliosError extends Error {
+  /** Whether this error is retryable */
+  public readonly retryable: boolean;
+
   constructor(
     message: string,
     public readonly status?: number,
@@ -27,7 +40,42 @@ export class HeliosError extends Error {
   ) {
     super(message);
     this.name = "HeliosError";
+    // 5xx errors and rate limits are retryable
+    this.retryable =
+      status === undefined ||
+      status >= 500 ||
+      status === 429;
   }
+}
+
+/**
+ * Check if a status code is retryable
+ */
+function isRetryableStatus(status: number, retryOnRateLimit: boolean): boolean {
+  if (status >= 500) return true;
+  if (status === 429 && retryOnRateLimit) return true;
+  return false;
+}
+
+/**
+ * Calculate delay for exponential backoff with jitter
+ */
+function calculateBackoffDelay(
+  attempt: number,
+  config: Required<RetryConfig>,
+): number {
+  const baseDelay = config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt);
+  const delay = Math.min(baseDelay, config.maxDelayMs);
+  // Add jitter (±10%)
+  const jitter = delay * 0.1 * (Math.random() * 2 - 1);
+  return Math.round(delay + jitter);
+}
+
+/**
+ * Sleep for a given number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -36,6 +84,7 @@ export class HeliosError extends Error {
 export class HeliosClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
+  private readonly retryConfig: Required<RetryConfig> | null;
 
   /**
    * Create a new Helios client
@@ -47,26 +96,44 @@ export class HeliosClient {
     }
     this.apiKey = config.apiKey;
     this.baseUrl = (config.baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "");
+
+    // Configure retry behavior
+    if (config.retry === false) {
+      this.retryConfig = null;
+    } else {
+      this.retryConfig = {
+        ...DEFAULT_RETRY_CONFIG,
+        ...config.retry,
+      };
+    }
   }
 
   /**
-   * Extract error message from a failed response
+   * Extract error message and code from a failed response
    */
-  private async extractErrorMessage(response: Response): Promise<string> {
+  private async extractError(
+    response: Response,
+  ): Promise<{ message: string; code?: string }> {
     let errorMessage = `Request failed with status ${response.status}`;
+    let errorCode: string | undefined;
     try {
-      const errorData = (await response.json()) as APIError;
+      const errorData = (await response.json()) as APIError & {
+        error?: { code?: string };
+      };
       if (errorData.error?.message) {
         errorMessage = errorData.error.message;
+      }
+      if (errorData.error?.code) {
+        errorCode = errorData.error.code;
       }
     } catch {
       // Use default error message
     }
-    return errorMessage;
+    return { message: errorMessage, code: errorCode };
   }
 
   /**
-   * Make an authenticated request to the API
+   * Make an authenticated request to the API with retry support
    */
   private async request<T>(
     method: string,
@@ -82,37 +149,146 @@ export class HeliosClient {
       headers["Content-Type"] = "application/json";
     }
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let lastError: HeliosError | undefined;
+    const maxAttempts = this.retryConfig
+      ? this.retryConfig.maxRetries + 1
+      : 1;
 
-    if (!response.ok) {
-      const errorMessage = await this.extractErrorMessage(response);
-      throw new HeliosError(errorMessage, response.status);
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const response = await fetch(url, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+        });
+
+        if (!response.ok) {
+          const { message, code } = await this.extractError(response);
+          const error = new HeliosError(message, response.status, code);
+
+          // Check if we should retry
+          if (
+            this.retryConfig &&
+            attempt < this.retryConfig.maxRetries &&
+            isRetryableStatus(
+              response.status,
+              this.retryConfig.retryOnRateLimit,
+            )
+          ) {
+            lastError = error;
+            const delay = calculateBackoffDelay(attempt, this.retryConfig);
+            await sleep(delay);
+            continue;
+          }
+
+          throw error;
+        }
+
+        return response.json() as Promise<T>;
+      } catch (error) {
+        // Network errors are retryable
+        if (
+          error instanceof TypeError &&
+          this.retryConfig &&
+          attempt < this.retryConfig.maxRetries
+        ) {
+          lastError = new HeliosError(
+            error.message || "Network error",
+            undefined,
+            "NETWORK_ERROR",
+          );
+          const delay = calculateBackoffDelay(attempt, this.retryConfig);
+          await sleep(delay);
+          continue;
+        }
+
+        // Re-throw HeliosError as-is
+        if (error instanceof HeliosError) {
+          throw error;
+        }
+
+        // Wrap other errors
+        throw new HeliosError(
+          error instanceof Error ? error.message : "Unknown error",
+          undefined,
+          "UNKNOWN_ERROR",
+        );
+      }
     }
 
-    return response.json() as Promise<T>;
+    // If we exhausted all retries, throw the last error
+    throw lastError || new HeliosError("Request failed after retries");
   }
 
   /**
-   * Make an authenticated request that returns text
+   * Make an authenticated request that returns text with retry support
    */
   private async requestText(path: string): Promise<string> {
     const url = `${this.baseUrl}${path}`;
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-    });
+    const headers = {
+      Authorization: `Bearer ${this.apiKey}`,
+    };
 
-    if (!response.ok) {
-      const errorMessage = await this.extractErrorMessage(response);
-      throw new HeliosError(errorMessage, response.status);
+    let lastError: HeliosError | undefined;
+    const maxAttempts = this.retryConfig
+      ? this.retryConfig.maxRetries + 1
+      : 1;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const response = await fetch(url, { headers });
+
+        if (!response.ok) {
+          const { message, code } = await this.extractError(response);
+          const error = new HeliosError(message, response.status, code);
+
+          if (
+            this.retryConfig &&
+            attempt < this.retryConfig.maxRetries &&
+            isRetryableStatus(
+              response.status,
+              this.retryConfig.retryOnRateLimit,
+            )
+          ) {
+            lastError = error;
+            const delay = calculateBackoffDelay(attempt, this.retryConfig);
+            await sleep(delay);
+            continue;
+          }
+
+          throw error;
+        }
+
+        return response.text();
+      } catch (error) {
+        if (
+          error instanceof TypeError &&
+          this.retryConfig &&
+          attempt < this.retryConfig.maxRetries
+        ) {
+          lastError = new HeliosError(
+            error.message || "Network error",
+            undefined,
+            "NETWORK_ERROR",
+          );
+          const delay = calculateBackoffDelay(attempt, this.retryConfig);
+          await sleep(delay);
+          continue;
+        }
+
+        if (error instanceof HeliosError) {
+          throw error;
+        }
+
+        throw new HeliosError(
+          error instanceof Error ? error.message : "Unknown error",
+          undefined,
+          "UNKNOWN_ERROR",
+        );
+      }
     }
 
-    return response.text();
+    throw lastError || new HeliosError("Request failed after retries");
   }
 
   /**
@@ -218,8 +394,8 @@ export class HeliosClient {
     });
 
     if (!response.ok) {
-      const errorMessage = await this.extractErrorMessage(response);
-      throw new HeliosError(errorMessage, response.status);
+      const { message, code } = await this.extractError(response);
+      throw new HeliosError(message, response.status, code);
     }
 
     if (!response.body) {

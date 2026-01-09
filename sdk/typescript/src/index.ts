@@ -2,6 +2,7 @@ export { HeliosClient, HeliosError } from "./client.js";
 export type {
   // Config
   HeliosConfig,
+  RetryConfig,
   // Task creation
   CreateTaskInput,
   CreateAsyncTaskInput,

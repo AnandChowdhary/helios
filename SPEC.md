@@ -617,6 +617,63 @@ All error responses follow a consistent structure with a `code` field for progra
 |------|-------------|
 | `INTERNAL_ERROR` | Unexpected server error |
 
+### SDK Retry Behavior
+
+Both TypeScript and Python SDKs include automatic retry with exponential backoff for transient failures:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `maxRetries` / `max_retries` | 3 | Maximum retry attempts |
+| `initialDelayMs` / `initial_delay_ms` | 1000 | Initial delay before first retry (ms) |
+| `maxDelayMs` / `max_delay_ms` | 10000 | Maximum delay between retries (ms) |
+| `backoffMultiplier` / `backoff_multiplier` | 2 | Exponential backoff multiplier |
+| `retryOnRateLimit` / `retry_on_rate_limit` | true | Whether to retry on 429 errors |
+
+**Retry Conditions:**
+- **Retried:** Network errors, HTTP 429 (rate limit), HTTP 5xx (server errors)
+- **Not Retried:** HTTP 4xx client errors (except 429)
+
+**TypeScript Example:**
+
+```typescript
+import { HeliosClient } from "@helios-sdk/typescript";
+
+const client = new HeliosClient({
+  apiKey: "your-api-key",
+  retry: {
+    maxRetries: 5,
+    initialDelayMs: 500,
+    retryOnRateLimit: true,
+  },
+});
+
+// Disable retry
+const noRetryClient = new HeliosClient({
+  apiKey: "your-api-key",
+  retry: false,
+});
+```
+
+**Python Example:**
+
+```python
+from helios_sdk import HeliosClient, HeliosConfig, RetryConfig
+
+client = HeliosClient(HeliosConfig(
+    api_key="your-api-key",
+    retry=RetryConfig(
+        max_retries=5,
+        initial_delay_ms=500,
+        retry_on_rate_limit=True,
+    ),
+))
+
+# Disable retry (default when retry is not provided)
+no_retry_client = HeliosClient(HeliosConfig(api_key="your-api-key"))
+```
+
+---
+
 ### Sandboxing
 
 Use `--dangerously-skip-permissions` only because:
