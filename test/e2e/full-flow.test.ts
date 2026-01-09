@@ -398,13 +398,17 @@ describe.skipIf(!shouldRunE2E)("E2E: Full Task Flow", () => {
           prompt:
             "Just say 'Hello from Helios!' and nothing else. Do not use any tools.",
           repository: {
-            url: "https://github.com/anthropics/anthropic-cookbook.git",
-            branch: "main",
+            // Use a small test repo for faster clone
+            url: "https://github.com/octocat/Hello-World.git",
+            branch: "master",
           },
           claude: {
             apiKey: ANTHROPIC_API_KEY,
             model: "claude-sonnet-4-5",
             maxTurns: 1,
+          },
+          options: {
+            timeout: 60, // 60 second timeout for Claude execution
           },
           output: { mode: "sync" },
         }),
@@ -494,10 +498,11 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
       },
       body: JSON.stringify({
         prompt:
-          "Use the Read tool to read the README.md file and tell me the title of the project.",
+          "Use the Read tool to read the README file and tell me what it says.",
         repository: {
-          url: "https://github.com/anthropics/anthropic-cookbook.git",
-          branch: "main",
+          // Use a small test repo for faster clone
+          url: "https://github.com/octocat/Hello-World.git",
+          branch: "master",
         },
         claude: {
           apiKey: ANTHROPIC_API_KEY,
@@ -505,7 +510,7 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
           maxTurns: 3,
         },
         options: {
-          timeout: 120,
+          timeout: 90, // 90 second timeout for Claude execution
           allowedTools: ["Read", "Glob"],
         },
         output: { mode: "sync" },
@@ -556,8 +561,9 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
         prompt:
           "This is a very short task that should complete before timeout.",
         repository: {
-          url: "https://github.com/anthropics/anthropic-cookbook.git",
-          branch: "main",
+          // Use a small test repo for faster clone
+          url: "https://github.com/octocat/Hello-World.git",
+          branch: "master",
         },
         claude: {
           apiKey: ANTHROPIC_API_KEY,

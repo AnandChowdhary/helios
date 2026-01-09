@@ -182,12 +182,15 @@ run_claude() {
   log_event "log" "{\"message\":\"Executing: claude ${claude_args[*]}\"}"
 
   # Run Claude Code with timeout, streaming output
+  # Use -k to send SIGKILL 10s after SIGTERM if process doesn't terminate
   # Embed exit code in output stream to capture it reliably
   local exit_code=0
   local captured_exit=""
   local line_count=0
   local start_time
   start_time=$(date +%s)
+  
+  log_event "log" "{\"message\":\"Starting Claude CLI with ${timeout_secs}s timeout...\"}"
   
   while IFS= read -r line || [[ -n "$line" ]]; do
     # Check for our exit code marker
@@ -210,7 +213,7 @@ run_claude() {
       escaped_line=$(echo "$line" | jq -Rs '.')
       log_event "log" "{\"message\":$escaped_line}"
     fi
-  done < <(timeout "$timeout_secs" claude "${claude_args[@]}" 2>&1; echo "__CLAUDE_EXIT_CODE__$?")
+  done < <(timeout -k 10 "$timeout_secs" claude "${claude_args[@]}" 2>&1; echo "__CLAUDE_EXIT_CODE__$?")
   
   local end_time
   end_time=$(date +%s)
