@@ -2,64 +2,64 @@
 
 ## Current State
 
-All Phase 1 and Phase 2 implementation is complete. 111 tests passing. Both staging and production are deployed.
+All Phase 1 and Phase 2 implementation is complete. Phase 3 TypeScript SDK is complete.
 
 **Deployed URLs:**
 
 - **Production**: https://helios.getelysium.workers.dev
 - **Staging**: https://helios-staging.getelysium.workers.dev
 
-**SPEC.md checklist**: Phase 1 and Phase 2 complete.
+**Test Suite:** 126 tests (111 main project + 15 SDK tests)
 
 ## Recent Changes (This Iteration)
 
-- Implemented `POST /v1/tasks/:taskId/push` endpoint (Phase 2 feature)
-  - Allows pushing completed task changes to a remote branch
-  - Supports automatic PR creation for GitHub repositories
-  - Added validation schema for push request
-  - Added 9 new integration tests for push functionality
-- Updated container HTTP server (`server.mjs`) with `/push` endpoint
-- Added `pushContainerChanges` helper function in container runner
-- Marked all Phase 2 items as complete in SPEC.md
+- Implemented TypeScript SDK (`sdk/typescript/`)
+  - Full client with all API methods: createTaskAsync, createTaskStream, getTask, cancelTask, getTaskLogs, getTaskDiff, pushTaskChanges, waitForTask
+  - Complete TypeScript types exported
+  - 15 unit tests for the SDK
+  - README with usage examples
 
 ## What's Done
 
-Phase 1 & 2 are complete:
+Phase 1, 2, and partial Phase 3:
 
-- Core API (task creation, status, cancel, logs, diff, **push**)
+- Core API (task creation, status, cancel, logs, diff, push)
 - Authentication and rate limiting
 - KV storage for task metadata
 - R2 storage for artifacts
 - Queue integration for async tasks
 - SSE streaming for sync mode
-- **Webhook notifications**
-- **Push-to-remote with PR creation**
+- Webhook notifications
+- Push-to-remote with PR creation
 - Container Dockerfile and entrypoint
-- Comprehensive test suite (111 tests)
+- Comprehensive test suite
 - CI/CD pipelines
+- **TypeScript SDK** (new)
 
-## Potential Future Work (Phase 3)
-
-If continuing development, consider these from the SPEC.md roadmap:
+## Potential Future Work (Remaining Phase 3)
 
 - WebSocket streaming (currently only SSE)
 - Concurrent task limits per account
 - Usage tracking and billing
 - Dashboard UI
-- SDK clients (npm/pip packages)
+- Python SDK
 
 ## Key Files
 
 ```
-src/routes/tasks.ts          # API routes including new push endpoint
-src/schemas/task.ts          # Validation schemas (CreateTaskSchema, PushTaskSchema)
-src/container/runner.ts      # Container management (pushContainerChanges)
-container/server.mjs         # Container HTTP server (handlePush)
-test/integration/tasks.test.ts  # Integration tests
+sdk/typescript/                 # TypeScript SDK (new)
+  src/client.ts                 # HeliosClient class
+  src/types.ts                  # TypeScript types
+  src/index.ts                  # Exports
+  src/client.test.ts            # SDK tests
+src/routes/tasks.ts             # API routes
+src/schemas/task.ts             # Validation schemas
+src/container/runner.ts         # Container management
+container/server.mjs            # Container HTTP server
 ```
 
 ## Notes
 
-- GitHub secrets configured: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, STAGING_API_KEY, ANTHROPIC_API_KEY
-- E2E tests require STAGING_URL and STAGING_API_KEY env vars to run
-- The push endpoint requires credentials to be passed in the request body (not stored)
+- SDK is published-ready but not yet on npm
+- To use the SDK locally, install from path: `npm install ./sdk/typescript`
+- SDK requires Node.js 18+ for native fetch

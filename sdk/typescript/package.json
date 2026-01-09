@@ -1,0 +1,47 @@
+{
+  "name": "@helios-sdk/typescript",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Helios Cloud Claude Code API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "helios",
+    "claude",
+    "ai",
+    "sdk",
+    "api"
+  ],
+  "author": "Anand Chowdhary",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnandChowdhary/helios.git",
+    "directory": "sdk/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/AnandChowdhary/helios/issues"
+  },
+  "homepage": "https://github.com/AnandChowdhary/helios#readme",
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.0"
+  }
+}

@@ -476,7 +476,8 @@ Use `--dangerously-skip-permissions` only because:
 - [ ] Concurrent task limits per account
 - [ ] Usage tracking and billing
 - [ ] Dashboard UI (optional)
-- [ ] SDK clients (TypeScript, Python)
+- [x] SDK clients (TypeScript)
+- [ ] SDK clients (Python)
 
 ---
 
