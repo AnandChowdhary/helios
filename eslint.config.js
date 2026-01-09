@@ -38,6 +38,9 @@ export default [
         DurableObjectStub: "readonly",
         setTimeout: "readonly",
         fetch: "readonly",
+        WebSocket: "readonly",
+        WebSocketPair: "readonly",
+        ArrayBuffer: "readonly",
       },
     },
     plugins: {
