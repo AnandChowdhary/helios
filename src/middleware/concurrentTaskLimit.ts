@@ -70,16 +70,22 @@ export const concurrentTaskLimitMiddleware = createMiddleware<{
 
   const currentCount = await getActiveTaskCount(c.env, apiKey.id);
 
+  // Add headers with concurrent task info (always, even when skipping limit check)
+  c.header("X-Concurrent-Tasks", currentCount.toString());
+  c.header("X-Concurrent-Tasks-Limit", limit.toString());
+  c.header("X-Concurrent-Tasks-Remaining", (limit - currentCount).toString());
+
+  // Skip concurrent limit check if flag is set
+  if (apiKey.skipConcurrentLimit) {
+    await next();
+    return;
+  }
+
   if (currentCount >= limit) {
     throw new HTTPException(429, {
       message: `Concurrent task limit exceeded. You have ${currentCount} active tasks (limit: ${limit}). Please wait for tasks to complete before starting new ones.`,
     });
   }
-
-  // Add headers with concurrent task info
-  c.header("X-Concurrent-Tasks", currentCount.toString());
-  c.header("X-Concurrent-Tasks-Limit", limit.toString());
-  c.header("X-Concurrent-Tasks-Remaining", (limit - currentCount).toString());
 
   await next();
 });

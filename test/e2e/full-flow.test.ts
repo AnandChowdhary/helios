@@ -583,6 +583,18 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
       }`,
     );
     console.log(`[TEST] Content-Type: ${res.headers.get("content-type")}`);
+    console.log(
+      `[TEST] X-Concurrent-Tasks: ${res.headers.get("X-Concurrent-Tasks")}`,
+    );
+    console.log(
+      `[TEST] X-Concurrent-Tasks-Limit: ${res.headers.get("X-Concurrent-Tasks-Limit")}`,
+    );
+
+    // Log error body if not 200
+    if (res.status !== 200) {
+      const errorBody = await res.text();
+      console.log(`[TEST] Error response body: ${errorBody}`);
+    }
 
     expect(res.status).toBe(200);
 

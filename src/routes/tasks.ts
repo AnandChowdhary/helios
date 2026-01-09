@@ -231,6 +231,9 @@ tasksRouter.post(
 
           // Track failed task
           await trackTaskCompleted(c.env, apiKey.id, task);
+
+          // Decrement concurrent task counter on stream failure
+          await decrementActiveTaskCount(c.env, apiKey.id);
         }
 
         // Stop the container after streaming is complete

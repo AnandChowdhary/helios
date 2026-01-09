@@ -23,6 +23,7 @@ interface ApiKey {
   concurrentTaskLimit: number;
   enabled: boolean;
   skipRateLimit?: boolean;
+  skipConcurrentLimit?: boolean;
 }
 
 function hashApiKey(key: string): string {
@@ -35,9 +36,19 @@ function generateApiKey(): string {
   return `hlx_${randomPart}`;
 }
 
-function parseArgs(): { env?: string; name?: string; skipRateLimit?: boolean } {
+function parseArgs(): {
+  env?: string;
+  name?: string;
+  skipRateLimit?: boolean;
+  skipConcurrentLimit?: boolean;
+} {
   const args = process.argv.slice(2);
-  const result: { env?: string; name?: string; skipRateLimit?: boolean } = {};
+  const result: {
+    env?: string;
+    name?: string;
+    skipRateLimit?: boolean;
+    skipConcurrentLimit?: boolean;
+  } = {};
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--env" && args[i + 1]) {
@@ -48,6 +59,8 @@ function parseArgs(): { env?: string; name?: string; skipRateLimit?: boolean } {
       i++;
     } else if (args[i] === "--skip-rate-limit") {
       result.skipRateLimit = true;
+    } else if (args[i] === "--skip-concurrent-limit") {
+      result.skipConcurrentLimit = true;
     }
   }
 
@@ -55,7 +68,7 @@ function parseArgs(): { env?: string; name?: string; skipRateLimit?: boolean } {
 }
 
 async function seedApiKeys() {
-  const { env, name, skipRateLimit } = parseArgs();
+  const { env, name, skipRateLimit, skipConcurrentLimit } = parseArgs();
 
   console.log("\n🔑 Generating Helios API Key...\n");
 
@@ -73,6 +86,7 @@ async function seedApiKeys() {
     concurrentTaskLimit: 5, // 5 concurrent tasks
     enabled: true,
     ...(skipRateLimit && { skipRateLimit: true }),
+    ...(skipConcurrentLimit && { skipConcurrentLimit: true }),
   };
 
   // Build wrangler command
@@ -91,6 +105,9 @@ async function seedApiKeys() {
   console.log(`Concurrent Task Limit: ${keyData.concurrentTaskLimit}`);
   if (skipRateLimit) {
     console.log(`Skip Rate Limit: ✓ enabled`);
+  }
+  if (skipConcurrentLimit) {
+    console.log(`Skip Concurrent Limit: ✓ enabled`);
   }
   console.log("\nStoring key in Cloudflare KV...\n");
 

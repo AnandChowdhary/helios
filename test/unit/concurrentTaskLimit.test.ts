@@ -169,6 +169,46 @@ describe("concurrentTaskLimitMiddleware", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("X-Concurrent-Tasks-Limit")).toBe("5");
   });
+
+  it("skips concurrent limit check when skipConcurrentLimit is true", async () => {
+    const skipLimitApiKey: ApiKey = {
+      id: "key_skip_concurrent",
+      name: "Skip Concurrent Limit Key",
+      keyHash: "skip-limit-hash",
+      createdAt: new Date().toISOString(),
+      rateLimit: 100,
+      concurrentTaskLimit: 3,
+      enabled: true,
+      skipConcurrentLimit: true,
+    };
+
+    const appWithSkip = new Hono<{ Bindings: Env }>();
+    appWithSkip.onError(errorHandler);
+    appWithSkip.use("*", async (c, next) => {
+      c.set("apiKey", skipLimitApiKey);
+      await next();
+    });
+    appWithSkip.use("*", concurrentTaskLimitMiddleware);
+    appWithSkip.post("/test", (c) => c.json({ success: true }));
+
+    const env = createMockEnv();
+    // Set way over the limit
+    mockRateLimitsKV.set(`concurrent:${skipLimitApiKey.id}`, "999");
+
+    const res = await appWithSkip.fetch(
+      new Request("http://localhost/test", { method: "POST" }),
+      env,
+    );
+
+    // Should succeed despite being over limit
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as SuccessBody;
+    expect(body.success).toBe(true);
+
+    // Should still have headers for informational purposes
+    expect(res.headers.get("X-Concurrent-Tasks")).toBe("999");
+    expect(res.headers.get("X-Concurrent-Tasks-Limit")).toBe("3");
+  });
 });
 
 describe("getActiveTaskCount", () => {
