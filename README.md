@@ -93,8 +93,16 @@ Authorization: Bearer <HELIOS_API_KEY>
 
 ### Base URL
 
+**Production:**
+
 ```
-https://helios.example.com
+https://helios.getelysium.workers.dev
+```
+
+**Staging:**
+
+```
+https://helios-staging.getelysium.workers.dev
 ```
 
 ---
@@ -109,29 +117,29 @@ POST /v1/tasks
 
 #### Request Fields
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `prompt` | string | Yes | - | The task prompt (1-100,000 characters) |
-| `repository.url` | string | Yes | - | Git repository URL (GitHub, GitLab, or Bitbucket) |
-| `repository.branch` | string | No | `main` | Branch to clone |
-| `repository.credentials.type` | string | No | - | Authentication type (`token`) |
-| `repository.credentials.value` | string | No | - | Authentication token (e.g., `ghp_xxx`) |
-| `claude.apiKey` | string | Yes | - | Anthropic API key (must start with `sk-ant-`) |
-| `claude.model` | string | No | `claude-sonnet-4-5` | Model to use (`claude-sonnet-4-5` or `claude-opus-4`) |
-| `claude.maxTurns` | number | No | `10` | Maximum conversation turns (1-50) |
-| `claude.systemPrompt` | string | No | - | Custom system prompt (max 10,000 characters) |
-| `options.timeout` | number | No | `300` | Task timeout in seconds (30-600) |
-| `options.allowedTools` | string[] | No | `["Read", "Write", "Bash", "Glob", "Grep"]` | Claude Code tools to allow |
-| `options.workingDirectory` | string | No | `/workspace` | Working directory in container |
-| `options.environment` | object | No | - | Environment variables to set |
-| `output.mode` | string | No | `sync` | Output mode (`sync` or `async`) |
-| `output.webhook.url` | string | No | - | Webhook URL for async notifications |
-| `output.webhook.secret` | string | No | - | Webhook HMAC secret (min 16 characters) |
+| Field                          | Type     | Required | Default                                     | Description                                           |
+| ------------------------------ | -------- | -------- | ------------------------------------------- | ----------------------------------------------------- |
+| `prompt`                       | string   | Yes      | -                                           | The task prompt (1-100,000 characters)                |
+| `repository.url`               | string   | Yes      | -                                           | Git repository URL (GitHub, GitLab, or Bitbucket)     |
+| `repository.branch`            | string   | No       | `main`                                      | Branch to clone                                       |
+| `repository.credentials.type`  | string   | No       | -                                           | Authentication type (`token`)                         |
+| `repository.credentials.value` | string   | No       | -                                           | Authentication token (e.g., `ghp_xxx`)                |
+| `claude.apiKey`                | string   | Yes      | -                                           | Anthropic API key (must start with `sk-ant-`)         |
+| `claude.model`                 | string   | No       | `claude-sonnet-4-5`                         | Model to use (`claude-sonnet-4-5` or `claude-opus-4`) |
+| `claude.maxTurns`              | number   | No       | `10`                                        | Maximum conversation turns (1-50)                     |
+| `claude.systemPrompt`          | string   | No       | -                                           | Custom system prompt (max 10,000 characters)          |
+| `options.timeout`              | number   | No       | `300`                                       | Task timeout in seconds (30-600)                      |
+| `options.allowedTools`         | string[] | No       | `["Read", "Write", "Bash", "Glob", "Grep"]` | Claude Code tools to allow                            |
+| `options.workingDirectory`     | string   | No       | `/workspace`                                | Working directory in container                        |
+| `options.environment`          | object   | No       | -                                           | Environment variables to set                          |
+| `output.mode`                  | string   | No       | `sync`                                      | Output mode (`sync` or `async`)                       |
+| `output.webhook.url`           | string   | No       | -                                           | Webhook URL for async notifications                   |
+| `output.webhook.secret`        | string   | No       | -                                           | Webhook HMAC secret (min 16 characters)               |
 
 #### Example: Async Task (curl)
 
 ```bash
-curl -X POST https://helios.example.com/v1/tasks \
+curl -X POST https://helios.getelysium.workers.dev/v1/tasks \
   -H "Authorization: Bearer $HELIOS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -162,14 +170,14 @@ curl -X POST https://helios.example.com/v1/tasks \
   "taskId": "550e8400-e29b-41d4-a716-446655440000",
   "status": "pending",
   "createdAt": "2025-01-08T10:00:00.000Z",
-  "statusUrl": "https://helios.example.com/v1/tasks/550e8400-e29b-41d4-a716-446655440000"
+  "statusUrl": "https://helios.getelysium.workers.dev/v1/tasks/550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
 #### Example: Sync Task with SSE Streaming (curl)
 
 ```bash
-curl -X POST https://helios.example.com/v1/tasks \
+curl -X POST https://helios.getelysium.workers.dev/v1/tasks \
   -H "Authorization: Bearer $HELIOS_API_KEY" \
   -H "Content-Type: application/json" \
   -H "Accept: text/event-stream" \
@@ -220,7 +228,7 @@ GET /v1/tasks/:taskId
 #### Example (curl)
 
 ```bash
-curl https://helios.example.com/v1/tasks/550e8400-e29b-41d4-a716-446655440000 \
+curl https://helios.getelysium.workers.dev/v1/tasks/550e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer $HELIOS_API_KEY"
 ```
 
@@ -266,7 +274,7 @@ POST /v1/tasks/:taskId/cancel
 #### Example (curl)
 
 ```bash
-curl -X POST https://helios.example.com/v1/tasks/550e8400-e29b-41d4-a716-446655440000/cancel \
+curl -X POST https://helios.getelysium.workers.dev/v1/tasks/550e8400-e29b-41d4-a716-446655440000/cancel \
   -H "Authorization: Bearer $HELIOS_API_KEY"
 ```
 
@@ -293,7 +301,7 @@ GET /v1/tasks/:taskId/logs
 #### Example (curl)
 
 ```bash
-curl https://helios.example.com/v1/tasks/550e8400-e29b-41d4-a716-446655440000/logs \
+curl https://helios.getelysium.workers.dev/v1/tasks/550e8400-e29b-41d4-a716-446655440000/logs \
   -H "Authorization: Bearer $HELIOS_API_KEY"
 ```
 
@@ -319,7 +327,7 @@ GET /v1/tasks/:taskId/diff
 #### Example (curl)
 
 ```bash
-curl https://helios.example.com/v1/tasks/550e8400-e29b-41d4-a716-446655440000/diff \
+curl https://helios.getelysium.workers.dev/v1/tasks/550e8400-e29b-41d4-a716-446655440000/diff \
   -H "Authorization: Bearer $HELIOS_API_KEY"
 ```
 
@@ -350,7 +358,7 @@ GET /health
 #### Example (curl)
 
 ```bash
-curl https://helios.example.com/health
+curl https://helios.getelysium.workers.dev/health
 ```
 
 **Response (200 OK):**
@@ -366,13 +374,13 @@ curl https://helios.example.com/health
 
 ## Task Status Values
 
-| Status | Description |
-|--------|-------------|
-| `pending` | Task is queued and waiting to start |
-| `running` | Task is currently executing |
-| `completed` | Task finished successfully |
-| `failed` | Task finished with an error |
-| `cancelled` | Task was cancelled by the user |
+| Status      | Description                         |
+| ----------- | ----------------------------------- |
+| `pending`   | Task is queued and waiting to start |
+| `running`   | Task is currently executing         |
+| `completed` | Task finished successfully          |
+| `failed`    | Task finished with an error         |
+| `cancelled` | Task was cancelled by the user      |
 
 ---
 
@@ -390,15 +398,15 @@ All error responses follow this format:
 
 ### HTTP Status Codes
 
-| Status | Description |
-|--------|-------------|
-| `200` | Success |
-| `202` | Accepted (async task created) |
-| `400` | Bad Request - Invalid input or task cannot be cancelled |
-| `401` | Unauthorized - Missing or invalid API key |
-| `404` | Not Found - Task or resource not found |
-| `429` | Too Many Requests - Rate limit exceeded |
-| `500` | Internal Server Error |
+| Status | Description                                             |
+| ------ | ------------------------------------------------------- |
+| `200`  | Success                                                 |
+| `202`  | Accepted (async task created)                           |
+| `400`  | Bad Request - Invalid input or task cannot be cancelled |
+| `401`  | Unauthorized - Missing or invalid API key               |
+| `404`  | Not Found - Task or resource not found                  |
+| `429`  | Too Many Requests - Rate limit exceeded                 |
+| `500`  | Internal Server Error                                   |
 
 ### Rate Limiting
 
@@ -416,14 +424,14 @@ X-RateLimit-Reset: 1704708000000
 
 When using sync mode, the response is a Server-Sent Events stream with these event types:
 
-| Event | Description |
-|-------|-------------|
-| `status` | Task status updates (`starting`, `running`) |
-| `message` | Claude's text responses |
-| `tool_use` | Tool invocation by Claude |
-| `tool_result` | Result from tool execution |
-| `complete` | Task completed with final result |
-| `error` | Error occurred during execution |
+| Event         | Description                                 |
+| ------------- | ------------------------------------------- |
+| `status`      | Task status updates (`starting`, `running`) |
+| `message`     | Claude's text responses                     |
+| `tool_use`    | Tool invocation by Claude                   |
+| `tool_result` | Result from tool execution                  |
+| `complete`    | Task completed with final result            |
+| `error`       | Error occurred during execution             |
 
 ---
 
@@ -434,29 +442,29 @@ When using sync mode, the response is a Server-Sent Events stream with these eve
 #### Create an Async Task
 
 ```typescript
-const response = await fetch('https://helios.example.com/v1/tasks', {
-  method: 'POST',
+const response = await fetch("https://helios.getelysium.workers.dev/v1/tasks", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${process.env.HELIOS_API_KEY}`,
-    'Content-Type': 'application/json',
+    Authorization: `Bearer ${process.env.HELIOS_API_KEY}`,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    prompt: 'Add unit tests for the auth module',
+    prompt: "Add unit tests for the auth module",
     repository: {
-      url: 'https://github.com/user/repo.git',
-      branch: 'main',
+      url: "https://github.com/user/repo.git",
+      branch: "main",
       credentials: {
-        type: 'token',
+        type: "token",
         value: process.env.GITHUB_TOKEN,
       },
     },
     claude: {
       apiKey: process.env.ANTHROPIC_API_KEY,
-      model: 'claude-sonnet-4-5',
+      model: "claude-sonnet-4-5",
       maxTurns: 15,
     },
     output: {
-      mode: 'async',
+      mode: "async",
     },
   }),
 });
@@ -475,24 +483,24 @@ async function waitForTask(taskId: string): Promise<any> {
 
   for (let i = 0; i < maxAttempts; i++) {
     const response = await fetch(
-      `https://helios.example.com/v1/tasks/${taskId}`,
+      `https://helios.getelysium.workers.dev/v1/tasks/${taskId}`,
       {
         headers: {
-          'Authorization': `Bearer ${process.env.HELIOS_API_KEY}`,
+          Authorization: `Bearer ${process.env.HELIOS_API_KEY}`,
         },
-      }
+      },
     );
 
     const task = await response.json();
 
-    if (task.status === 'completed' || task.status === 'failed') {
+    if (task.status === "completed" || task.status === "failed") {
       return task;
     }
 
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 
-  throw new Error('Task timed out');
+  throw new Error("Task timed out");
 }
 
 const result = await waitForTask(taskId);
@@ -506,46 +514,49 @@ console.log(`Task ${result.status}:`, result.result?.summary);
 // Use fetch with ReadableStream for full control.
 
 async function streamTask(taskPayload: object) {
-  const response = await fetch('https://helios.example.com/v1/tasks', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.HELIOS_API_KEY}`,
-      'Content-Type': 'application/json',
+  const response = await fetch(
+    "https://helios.getelysium.workers.dev/v1/tasks",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.HELIOS_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...taskPayload,
+        output: { mode: "sync" },
+      }),
     },
-    body: JSON.stringify({
-      ...taskPayload,
-      output: { mode: 'sync' },
-    }),
-  });
+  );
 
   if (!response.body) {
-    throw new Error('No response body');
+    throw new Error("No response body");
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
 
-    let currentEvent = 'message';
+    let currentEvent = "message";
     for (const line of lines) {
-      if (line.startsWith('event: ')) {
+      if (line.startsWith("event: ")) {
         currentEvent = line.slice(7);
-      } else if (line.startsWith('data: ')) {
+      } else if (line.startsWith("data: ")) {
         const data = JSON.parse(line.slice(6));
         console.log(`[${currentEvent}]`, data);
 
-        if (currentEvent === 'complete') {
+        if (currentEvent === "complete") {
           return data;
         }
-        if (currentEvent === 'error') {
+        if (currentEvent === "error") {
           throw new Error(data.message);
         }
       }
@@ -560,7 +571,7 @@ async function streamTask(taskPayload: object) {
 class HeliosClient {
   constructor(
     private apiKey: string,
-    private baseUrl = 'https://helios.example.com'
+    private baseUrl = "https://helios.getelysium.workers.dev",
   ) {}
 
   async createTask(options: {
@@ -572,32 +583,32 @@ class HeliosClient {
     async?: boolean;
   }) {
     const response = await fetch(`${this.baseUrl}/v1/tasks`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         prompt: options.prompt,
         repository: {
           url: options.repoUrl,
-          branch: options.branch ?? 'main',
+          branch: options.branch ?? "main",
           credentials: options.githubToken
-            ? { type: 'token', value: options.githubToken }
+            ? { type: "token", value: options.githubToken }
             : undefined,
         },
         claude: {
           apiKey: options.anthropicApiKey,
         },
         output: {
-          mode: options.async ? 'async' : 'sync',
+          mode: options.async ? "async" : "sync",
         },
       }),
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error?.message ?? 'Request failed');
+      throw new Error(error.error?.message ?? "Request failed");
     }
 
     return response.json();
@@ -606,13 +617,13 @@ class HeliosClient {
   async getTask(taskId: string) {
     const response = await fetch(`${this.baseUrl}/v1/tasks/${taskId}`, {
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
       },
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error?.message ?? 'Request failed');
+      throw new Error(error.error?.message ?? "Request failed");
     }
 
     return response.json();
@@ -620,15 +631,15 @@ class HeliosClient {
 
   async cancelTask(taskId: string) {
     const response = await fetch(`${this.baseUrl}/v1/tasks/${taskId}/cancel`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
       },
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error?.message ?? 'Request failed');
+      throw new Error(error.error?.message ?? "Request failed");
     }
 
     return response.json();
@@ -639,14 +650,451 @@ class HeliosClient {
 const helios = new HeliosClient(process.env.HELIOS_API_KEY!);
 
 const { taskId } = await helios.createTask({
-  prompt: 'Refactor the utils module to use TypeScript',
-  repoUrl: 'https://github.com/user/repo.git',
+  prompt: "Refactor the utils module to use TypeScript",
+  repoUrl: "https://github.com/user/repo.git",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY!,
   async: true,
 });
 
 // Later...
 const task = await helios.getTask(taskId);
+```
+
+### Python
+
+#### Create an Async Task
+
+```python
+import os
+import requests
+
+response = requests.post(
+    "https://helios.getelysium.workers.dev/v1/tasks",
+    headers={
+        "Authorization": f"Bearer {os.environ['HELIOS_API_KEY']}",
+        "Content-Type": "application/json",
+    },
+    json={
+        "prompt": "Add unit tests for the auth module",
+        "repository": {
+            "url": "https://github.com/user/repo.git",
+            "branch": "main",
+            "credentials": {
+                "type": "token",
+                "value": os.environ.get("GITHUB_TOKEN"),
+            },
+        },
+        "claude": {
+            "apiKey": os.environ["ANTHROPIC_API_KEY"],
+            "model": "claude-sonnet-4-5",
+            "maxTurns": 15,
+        },
+        "output": {
+            "mode": "async",
+        },
+    },
+)
+
+data = response.json()
+print(f"Task created: {data['taskId']}")
+print(f"Check status at: {data['statusUrl']}")
+```
+
+#### Poll for Task Completion
+
+```python
+import time
+import requests
+import os
+
+def wait_for_task(task_id: str, max_attempts: int = 60, poll_interval: int = 5):
+    """Wait for a task to complete, polling at regular intervals."""
+    base_url = "https://helios.getelysium.workers.dev"
+    headers = {"Authorization": f"Bearer {os.environ['HELIOS_API_KEY']}"}
+
+    for _ in range(max_attempts):
+        response = requests.get(f"{base_url}/v1/tasks/{task_id}", headers=headers)
+        task = response.json()
+
+        if task["status"] in ("completed", "failed"):
+            return task
+
+        time.sleep(poll_interval)
+
+    raise TimeoutError("Task timed out")
+
+# Usage
+result = wait_for_task(task_id)
+print(f"Task {result['status']}: {result.get('result', {}).get('summary', 'No summary')}")
+```
+
+#### Stream Sync Task
+
+```python
+import os
+import json
+import requests
+
+def stream_task(payload: dict):
+    """Stream a sync task and yield events."""
+    response = requests.post(
+        "https://helios.getelysium.workers.dev/v1/tasks",
+        headers={
+            "Authorization": f"Bearer {os.environ['HELIOS_API_KEY']}",
+            "Content-Type": "application/json",
+        },
+        json={**payload, "output": {"mode": "sync"}},
+        stream=True,
+    )
+
+    current_event = "message"
+    for line in response.iter_lines():
+        if not line:
+            continue
+
+        line = line.decode("utf-8")
+        if line.startswith("event: "):
+            current_event = line[7:]
+        elif line.startswith("data: "):
+            data = json.loads(line[6:])
+            yield current_event, data
+
+            if current_event == "complete":
+                return
+            if current_event == "error":
+                raise Exception(data.get("message", "Unknown error"))
+
+# Usage
+for event_type, data in stream_task({
+    "prompt": "List all Python files in the repository",
+    "repository": {"url": "https://github.com/user/repo.git"},
+    "claude": {"apiKey": os.environ["ANTHROPIC_API_KEY"]},
+}):
+    print(f"[{event_type}]", data)
+```
+
+#### Simple Client Class
+
+```python
+import os
+import requests
+from typing import Optional
+
+class HeliosClient:
+    def __init__(self, api_key: str, base_url: str = "https://helios.getelysium.workers.dev"):
+        self.api_key = api_key
+        self.base_url = base_url
+
+    def _headers(self) -> dict:
+        return {"Authorization": f"Bearer {self.api_key}"}
+
+    def create_task(
+        self,
+        prompt: str,
+        repo_url: str,
+        anthropic_api_key: str,
+        branch: str = "main",
+        github_token: Optional[str] = None,
+        async_mode: bool = False,
+    ) -> dict:
+        """Create a new task."""
+        payload = {
+            "prompt": prompt,
+            "repository": {
+                "url": repo_url,
+                "branch": branch,
+            },
+            "claude": {"apiKey": anthropic_api_key},
+            "output": {"mode": "async" if async_mode else "sync"},
+        }
+
+        if github_token:
+            payload["repository"]["credentials"] = {"type": "token", "value": github_token}
+
+        response = requests.post(
+            f"{self.base_url}/v1/tasks",
+            headers={**self._headers(), "Content-Type": "application/json"},
+            json=payload,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_task(self, task_id: str) -> dict:
+        """Get task status and result."""
+        response = requests.get(f"{self.base_url}/v1/tasks/{task_id}", headers=self._headers())
+        response.raise_for_status()
+        return response.json()
+
+    def cancel_task(self, task_id: str) -> dict:
+        """Cancel a running task."""
+        response = requests.post(f"{self.base_url}/v1/tasks/{task_id}/cancel", headers=self._headers())
+        response.raise_for_status()
+        return response.json()
+
+    def get_diff(self, task_id: str) -> str:
+        """Get the git diff from a completed task."""
+        response = requests.get(f"{self.base_url}/v1/tasks/{task_id}/diff", headers=self._headers())
+        response.raise_for_status()
+        return response.text
+
+# Usage
+helios = HeliosClient(os.environ["HELIOS_API_KEY"])
+
+result = helios.create_task(
+    prompt="Refactor the utils module to use TypeScript",
+    repo_url="https://github.com/user/repo.git",
+    anthropic_api_key=os.environ["ANTHROPIC_API_KEY"],
+    async_mode=True,
+)
+
+print(f"Task ID: {result['taskId']}")
+```
+
+---
+
+## Practical Use Cases
+
+### GitHub Actions: Auto-fix Failing Tests
+
+Add this workflow to automatically create a PR when tests fail:
+
+```yaml
+# .github/workflows/auto-fix-tests.yml
+name: Auto-fix Failing Tests
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  auto-fix:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create fix task
+        id: helios
+        run: |
+          RESPONSE=$(curl -s -X POST https://helios.getelysium.workers.dev/v1/tasks \
+            -H "Authorization: Bearer ${{ secrets.HELIOS_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "prompt": "The CI tests are failing. Please analyze the test output, identify the issues, and fix them. Run the tests after fixing to verify.",
+              "repository": {
+                "url": "https://github.com/${{ github.repository }}.git",
+                "branch": "${{ github.event.workflow_run.head_branch }}",
+                "credentials": {
+                  "type": "token",
+                  "value": "${{ secrets.GITHUB_TOKEN }}"
+                }
+              },
+              "claude": {
+                "apiKey": "${{ secrets.ANTHROPIC_API_KEY }}",
+                "maxTurns": 20
+              },
+              "output": {
+                "mode": "async"
+              }
+            }')
+          echo "task_id=$(echo $RESPONSE | jq -r '.taskId')" >> $GITHUB_OUTPUT
+
+      - name: Wait for task
+        run: |
+          TASK_ID="${{ steps.helios.outputs.task_id }}"
+          for i in {1..60}; do
+            STATUS=$(curl -s https://helios.getelysium.workers.dev/v1/tasks/$TASK_ID \
+              -H "Authorization: Bearer ${{ secrets.HELIOS_API_KEY }}" | jq -r '.status')
+            echo "Task status: $STATUS"
+            if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
+              break
+            fi
+            sleep 10
+          done
+```
+
+### Slack Bot: Code Review on Command
+
+```typescript
+// Slack bot handler for /review command
+import { App } from "@slack/bolt";
+
+const app = new App({
+  token: process.env.SLACK_BOT_TOKEN,
+  signingSecret: process.env.SLACK_SIGNING_SECRET,
+});
+
+app.command("/review", async ({ command, ack, respond }) => {
+  await ack();
+
+  // Parse: /review https://github.com/user/repo/pull/123
+  const prUrl = command.text.trim();
+  const match = prUrl.match(/github\.com\/(.+)\/(.+)\/pull\/(\d+)/);
+
+  if (!match) {
+    await respond("Please provide a valid GitHub PR URL");
+    return;
+  }
+
+  const [, owner, repo, prNumber] = match;
+
+  await respond(`Starting code review for PR #${prNumber}...`);
+
+  // Create Helios task
+  const response = await fetch(
+    "https://helios.getelysium.workers.dev/v1/tasks",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.HELIOS_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt: `Review the code changes in this pull request. Check for:
+        - Potential bugs or logic errors
+        - Security vulnerabilities
+        - Performance issues
+        - Code style and best practices
+        - Missing tests
+
+        Provide a detailed review with specific line references.`,
+        repository: {
+          url: `https://github.com/${owner}/${repo}.git`,
+          branch: `refs/pull/${prNumber}/head`,
+          credentials: {
+            type: "token",
+            value: process.env.GITHUB_TOKEN,
+          },
+        },
+        claude: {
+          apiKey: process.env.ANTHROPIC_API_KEY,
+          model: "claude-sonnet-4-5",
+          maxTurns: 10,
+        },
+        output: { mode: "async" },
+      }),
+    },
+  );
+
+  const { taskId } = await response.json();
+
+  // Poll and post result (simplified)
+  const result = await waitForTask(taskId);
+  await respond({
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Code Review Complete*\n\n${result.result?.summary || "Review completed"}`,
+        },
+      },
+    ],
+  });
+});
+```
+
+### Webhook Handler: Process Task Results
+
+```typescript
+// Express webhook handler
+import express from "express";
+import crypto from "crypto";
+
+const app = express();
+app.use(express.raw({ type: "application/json" }));
+
+app.post("/webhooks/helios", (req, res) => {
+  // Verify webhook signature
+  const signature = req.headers["x-helios-signature"] as string;
+  const expectedSignature =
+    "sha256=" +
+    crypto
+      .createHmac("sha256", process.env.WEBHOOK_SECRET!)
+      .update(req.body)
+      .digest("hex");
+
+  if (signature !== expectedSignature) {
+    return res.status(401).send("Invalid signature");
+  }
+
+  const event = JSON.parse(req.body.toString());
+
+  switch (event.event) {
+    case "task.completed":
+      console.log(`Task ${event.taskId} completed!`);
+      console.log(`Summary: ${event.result.summary}`);
+      console.log(`Files changed: ${event.result.filesChanged.length}`);
+      // Create PR, notify team, etc.
+      break;
+
+    case "task.failed":
+      console.error(`Task ${event.taskId} failed: ${event.error}`);
+      // Alert on-call, retry, etc.
+      break;
+  }
+
+  res.sendStatus(200);
+});
+
+app.listen(3000);
+```
+
+### CLI Tool: Quick Code Tasks
+
+```bash
+#!/bin/bash
+# helios-cli.sh - Simple CLI for Helios
+
+HELIOS_URL="https://helios.getelysium.workers.dev"
+
+helios_task() {
+    local prompt="$1"
+    local repo="${2:-$(git remote get-url origin)}"
+    local branch="${3:-$(git branch --show-current)}"
+
+    echo "Creating task..."
+
+    RESPONSE=$(curl -s -X POST "$HELIOS_URL/v1/tasks" \
+        -H "Authorization: Bearer $HELIOS_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"prompt\": \"$prompt\",
+            \"repository\": {
+                \"url\": \"$repo\",
+                \"branch\": \"$branch\"
+            },
+            \"claude\": {
+                \"apiKey\": \"$ANTHROPIC_API_KEY\"
+            },
+            \"output\": {\"mode\": \"async\"}
+        }")
+
+    TASK_ID=$(echo "$RESPONSE" | jq -r '.taskId')
+    echo "Task ID: $TASK_ID"
+
+    # Poll for completion
+    while true; do
+        STATUS=$(curl -s "$HELIOS_URL/v1/tasks/$TASK_ID" \
+            -H "Authorization: Bearer $HELIOS_API_KEY" | jq -r '.status')
+
+        echo "Status: $STATUS"
+
+        if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
+            # Get full result
+            curl -s "$HELIOS_URL/v1/tasks/$TASK_ID" \
+                -H "Authorization: Bearer $HELIOS_API_KEY" | jq '.result'
+            break
+        fi
+
+        sleep 5
+    done
+}
+
+# Usage: ./helios-cli.sh "Add error handling to the API routes"
+helios_task "$1" "$2" "$3"
 ```
 
 ---

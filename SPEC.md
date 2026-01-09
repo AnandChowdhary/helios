@@ -485,20 +485,17 @@ Use `--dangerously-skip-permissions` only because:
 These existing projects informed this design:
 
 1. **[claude-agent-sdk-container](https://github.com/receipting/claude-agent-sdk-container)**
-
    - REST API + WebSocket with Hono
    - GitHub OAuth authentication
    - Session management
 
 2. **[claude-code-sandbox](https://github.com/textcortex/claude-code-sandbox)**
-
    - Docker container management
    - Git branch isolation
    - Credential discovery and forwarding
    - File copying (not mounting) for isolation
 
 3. **[cloudrun-claude-code](https://github.com/mslavov/cloudrun-claude-code)**
-
    - Cloud Run deployment pattern
    - Async tasks with webhooks
    - KMS encryption for secrets
@@ -552,7 +549,7 @@ export default {
           status: "running",
           containerId: container.id,
           createdAt: new Date().toISOString(),
-        })
+        }),
       );
 
       return Response.json({ taskId, status: "pending" }, { status: 202 });
@@ -880,7 +877,7 @@ export const CreateTaskSchema = z.object({
       .refine(
         (url) =>
           /^https:\/\/(github\.com|gitlab\.com|bitbucket\.org)/.test(url),
-        "Only GitHub, GitLab, and Bitbucket URLs are supported"
+        "Only GitHub, GitLab, and Bitbucket URLs are supported",
       ),
     branch: z
       .string()
@@ -899,7 +896,7 @@ export const CreateTaskSchema = z.object({
       .string()
       .refine(
         (key) => key.startsWith("sk-ant-"),
-        "Invalid Anthropic API key format"
+        "Invalid Anthropic API key format",
       ),
     model: z
       .enum(["claude-sonnet-4-5", "claude-opus-4"])
@@ -967,7 +964,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Env }>(
     c.set("apiKey", keyData);
 
     await next();
-  }
+  },
 );
 
 async function hashApiKey(key: string): Promise<string> {
@@ -1020,11 +1017,11 @@ export const rateLimitMiddleware = createMiddleware<{ Bindings: Env }>(
     c.header("X-RateLimit-Limit", apiKey.rateLimit.toString());
     c.header(
       "X-RateLimit-Remaining",
-      (apiKey.rateLimit - count - 1).toString()
+      (apiKey.rateLimit - count - 1).toString(),
     );
 
     await next();
-  }
+  },
 );
 ```
 
@@ -1080,7 +1077,7 @@ tasksRouter.post("/", validateBody(CreateTaskSchema), async (c) => {
         createdAt: task.createdAt,
         statusUrl: `${new URL(c.req.url).origin}/v1/tasks/${taskId}`,
       },
-      202
+      202,
     );
   }
 
@@ -1464,7 +1461,7 @@ describe("Authentication", () => {
         createdAt: new Date().toISOString(),
         rateLimit: 100,
         enabled: true,
-      })
+      }),
     );
   });
 
@@ -1478,7 +1475,7 @@ describe("Authentication", () => {
       new Request("http://localhost/v1/tasks", {
         headers: { Authorization: "Bearer invalid-key" },
       }),
-      env
+      env,
     );
     expect(res.status).toBe(401);
   });
@@ -1497,7 +1494,7 @@ describe("Authentication", () => {
           claude: { apiKey: "sk-ant-test" },
         }),
       }),
-      env
+      env,
     );
     // Should fail validation, not auth
     expect(res.status).not.toBe(401);
@@ -1538,7 +1535,7 @@ describe("Tasks API", () => {
         id: "test",
         enabled: true,
         rateLimit: 100,
-      })
+      }),
     );
   });
 
@@ -1552,7 +1549,7 @@ describe("Tasks API", () => {
         },
         body: JSON.stringify(validPayload),
       }),
-      env
+      env,
     );
 
     expect(res.status).toBe(202);
@@ -1575,7 +1572,7 @@ describe("Tasks API", () => {
           repository: { url: "https://malicious-site.com/repo.git" },
         }),
       }),
-      env
+      env,
     );
 
     expect(res.status).toBe(400);
@@ -1592,7 +1589,7 @@ describe("Tasks API", () => {
         },
         body: JSON.stringify(validPayload),
       }),
-      env
+      env,
     );
 
     const { taskId } = await createRes.json();
@@ -1602,7 +1599,7 @@ describe("Tasks API", () => {
       new Request(`http://localhost/v1/tasks/${taskId}`, {
         headers: { Authorization: "Bearer test-key" },
       }),
-      env
+      env,
     );
 
     expect(getRes.status).toBe(200);
@@ -1649,7 +1646,7 @@ describe.skipIf(!API_KEY)("E2E: Full Task Flow", () => {
 
     expect(createRes.status).toBe(200);
     expect(createRes.headers.get("content-type")).toContain(
-      "text/event-stream"
+      "text/event-stream",
     );
 
     // Read SSE stream
@@ -1674,7 +1671,7 @@ describe.skipIf(!API_KEY)("E2E: Full Task Flow", () => {
     // Verify we got expected events
     expect(events.some((e) => e.status === "running")).toBe(true);
     expect(
-      events.some((e) => e.status === "completed" || e.success !== undefined)
+      events.some((e) => e.status === "completed" || e.success !== undefined),
     ).toBe(true);
   }, 120000); // 2 minute timeout
 });
@@ -1991,9 +1988,9 @@ seedApiKeys().catch(console.error);
 - [x] Cancel task endpoint
 - [x] Logs and diff endpoints
 - [x] E2E tests
-- [ ] Staging deployment
+- [x] Staging deployment
 - [x] Documentation
-- [ ] Production deployment
+- [x] Production deployment
 
 ---
 
