@@ -35,6 +35,7 @@ export interface Task {
   result?: TaskResult;
   error?: string;
   containerId?: string;
+  apiKeyId?: string; // ID of the API key that created this task
 }
 
 export interface TaskResult {
@@ -56,6 +57,7 @@ export interface FileChange {
 
 export interface TaskQueueMessage {
   taskId: string;
+  apiKeyId: string; // ID of the API key that created this task
   prompt: string;
   repository: {
     url: string;
@@ -86,5 +88,6 @@ export interface ApiKey {
   keyHash: string;
   createdAt: string;
   rateLimit: number; // requests per minute
+  concurrentTaskLimit: number; // maximum concurrent running tasks (default: 5)
   enabled: boolean;
 }

@@ -4,6 +4,7 @@ import {
   getContainerState,
   getContainerResult,
 } from "../container/runner";
+import { decrementActiveTaskCount } from "../middleware/concurrentTaskLimit";
 
 /**
  * Processes a queued task message by starting a container to execute Claude Code.
@@ -70,6 +71,9 @@ async function processQueuedTask(
       success: result.success,
       filesChanged: result.filesChanged?.length || 0,
     });
+
+    // Decrement concurrent task counter on completion
+    await decrementActiveTaskCount(env, message.apiKeyId);
   } catch (error) {
     task.status = "failed";
     task.completedAt = new Date().toISOString();
@@ -83,6 +87,9 @@ async function processQueuedTask(
     if (message.webhook) {
       await sendWebhook(message.webhook, task);
     }
+
+    // Decrement concurrent task counter on failure
+    await decrementActiveTaskCount(env, message.apiKeyId);
 
     console.error(`Task ${taskId} failed:`, error);
     throw error;

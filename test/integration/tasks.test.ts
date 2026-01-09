@@ -95,6 +95,7 @@ describe("Tasks API Integration", () => {
     keyHash: "",
     createdAt: new Date().toISOString(),
     rateLimit: 100,
+    concurrentTaskLimit: 5,
     enabled: true,
   };
 
