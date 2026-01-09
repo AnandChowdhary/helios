@@ -19,7 +19,7 @@ import type {
   WebSocketStreamMessage,
 } from "../types";
 import { errorResponse, ErrorCodes } from "../utils/errors";
-import { storeLogsToR2, formatLogEntry } from "../utils/logs";
+import { StreamingLogManager } from "../utils/logs";
 
 export const streamRouter = new Hono<{ Bindings: Env }>();
 
@@ -101,9 +101,11 @@ async function processTask(
   input: CreateTaskInput,
   taskId: string,
 ): Promise<void> {
-  // Log buffer to collect logs for R2 storage
-  const logBuffer: string[] = [];
-  let logsStoredToR2 = false;
+  // Use streaming log manager for real-time R2 uploads
+  const logManager = new StreamingLogManager(env, taskId, {
+    flushIntervalMs: 5000, // Flush logs to R2 every 5 seconds
+    maxBufferSize: 50, // Or when buffer reaches 50 entries
+  });
 
   const task: Task = {
     id: taskId,
@@ -186,9 +188,9 @@ async function processTask(
         } else if (line.startsWith("data: ")) {
           const eventData = line.slice(6);
 
-          // Capture log entry (skip heartbeats)
+          // Capture log entry (skip heartbeats) - streams incrementally to R2
           if (currentEvent !== "heartbeat") {
-            logBuffer.push(formatLogEntry(currentEvent, eventData));
+            await logManager.addLog(currentEvent, eventData);
           }
 
           // Forward message via WebSocket
@@ -217,11 +219,8 @@ async function processTask(
                 );
               }
 
-              // Store logs to R2
-              if (logBuffer.length > 0) {
-                await storeLogsToR2(env, taskId, logBuffer);
-                logsStoredToR2 = true;
-              }
+              // Finalize logs - flushes remaining buffer and marks as complete
+              await logManager.finalize();
             }
           } catch {
             // If data is not JSON, send as-is
@@ -259,10 +258,8 @@ async function processTask(
         }
       }
 
-      // Store logs if not already stored (stream ended without 'complete' event)
-      if (logBuffer.length > 0 && !logsStoredToR2) {
-        await storeLogsToR2(env, taskId, logBuffer);
-      }
+      // Finalize logs if not already done (stream ended without 'complete' event)
+      await logManager.finalize();
     } else {
       // Container didn't return a stream
       server.send(
@@ -277,12 +274,12 @@ async function processTask(
       task.completedAt = new Date().toISOString();
       await env.TASKS.put(taskId, JSON.stringify(task));
 
-      // Store error log to R2
-      await storeLogsToR2(
-        env,
-        taskId,
-        formatLogEntry("error", "Failed to connect to container log stream"),
+      // Store error log to R2 via streaming manager
+      await logManager.addLog(
+        "error",
+        "Failed to connect to container log stream",
       );
+      await logManager.finalize();
     }
 
     // Stop the container after streaming is complete
@@ -310,11 +307,9 @@ async function processTask(
     task.completedAt = new Date().toISOString();
     await env.TASKS.put(taskId, JSON.stringify(task));
 
-    // Store logs to R2 (including error)
-    logBuffer.push(formatLogEntry("error", errorMessage));
-    if (logBuffer.length > 0) {
-      await storeLogsToR2(env, taskId, logBuffer);
-    }
+    // Store error log and finalize
+    await logManager.addLog("error", errorMessage);
+    await logManager.finalize();
 
     // Try to stop container on error
     try {

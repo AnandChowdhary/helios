@@ -26,7 +26,7 @@ import {
 } from "../services/usage";
 import { addTaskToIndex, listTasks } from "../services/taskIndex";
 import { errorResponse, ErrorCodes } from "../utils/errors";
-import { storeLogsToR2, formatLogEntry } from "../utils/logs";
+import { StreamingLogManager } from "../utils/logs";
 
 export const tasksRouter = new Hono<{ Bindings: Env }>();
 
@@ -181,9 +181,11 @@ tasksRouter.post(
 
     // Sync mode: start container and stream SSE response
     return streamSSE(c, async (stream) => {
-      // Log buffer to collect logs for R2 storage
-      const logBuffer: string[] = [];
-      let logsStoredToR2 = false;
+      // Use streaming log manager for real-time R2 uploads
+      const logManager = new StreamingLogManager(c.env, taskId, {
+        flushIntervalMs: 5000, // Flush logs to R2 every 5 seconds
+        maxBufferSize: 50, // Or when buffer reaches 50 entries
+      });
 
       try {
         // Update task status to running
@@ -241,9 +243,9 @@ tasksRouter.post(
                 data,
               });
 
-              // Capture log entry (skip heartbeats)
+              // Capture log entry (skip heartbeats) - streams incrementally to R2
               if (currentEvent !== "heartbeat") {
-                logBuffer.push(formatLogEntry(currentEvent, data));
+                await logManager.addLog(currentEvent, data);
               }
 
               // If we got a complete event, update task and stop streaming
@@ -266,11 +268,8 @@ tasksRouter.post(
                     );
                   }
 
-                  // Store logs to R2
-                  if (logBuffer.length > 0) {
-                    await storeLogsToR2(c.env, taskId, logBuffer);
-                    logsStoredToR2 = true;
-                  }
+                  // Finalize logs - flushes remaining buffer and marks as complete
+                  await logManager.finalize();
                 } catch {
                   // Ignore parse errors
                 }
@@ -301,10 +300,8 @@ tasksRouter.post(
             }
           }
 
-          // Store logs if not already stored (stream ended without 'complete' event)
-          if (logBuffer.length > 0 && !logsStoredToR2) {
-            await storeLogsToR2(c.env, taskId, logBuffer);
-          }
+          // Finalize logs if not already done (stream ended without 'complete' event)
+          await logManager.finalize();
         } else {
           // Fallback: container didn't return a stream
           await stream.writeSSE({
@@ -323,12 +320,12 @@ tasksRouter.post(
           // Track failed task
           await trackTaskCompleted(c.env, apiKey.id, task);
 
-          // Store error log to R2
-          await storeLogsToR2(
-            c.env,
-            taskId,
-            formatLogEntry("error", "Failed to connect to container log stream"),
+          // Store error log to R2 via streaming manager
+          await logManager.addLog(
+            "error",
+            "Failed to connect to container log stream",
           );
+          await logManager.finalize();
 
           // Decrement concurrent task counter on stream failure
           await decrementActiveTaskCount(c.env, apiKey.id);
@@ -363,11 +360,9 @@ tasksRouter.post(
         // Track failed task
         await trackTaskCompleted(c.env, apiKey.id, task);
 
-        // Store logs to R2 (including error)
-        logBuffer.push(formatLogEntry("error", errorMessage));
-        if (logBuffer.length > 0) {
-          await storeLogsToR2(c.env, taskId, logBuffer);
-        }
+        // Store error log and finalize
+        await logManager.addLog("error", errorMessage);
+        await logManager.finalize();
 
         // Try to stop container on error
         try {
