@@ -5,9 +5,10 @@
  * Generates a new Helios API key and stores it in Cloudflare KV.
  *
  * Usage:
- *   npm run seed-keys                    # Generate key for production
- *   npm run seed-keys -- --env staging   # Generate key for staging
- *   npm run seed-keys -- --name "My Key" # Custom key name
+ *   npm run seed-keys                          # Generate key for production
+ *   npm run seed-keys -- --env staging         # Generate key for staging
+ *   npm run seed-keys -- --name "My Key"       # Custom key name
+ *   npm run seed-keys -- --skip-rate-limit     # Skip rate limiting for this key
  */
 
 import { execSync } from "child_process";
@@ -19,7 +20,9 @@ interface ApiKey {
   keyHash: string;
   createdAt: string;
   rateLimit: number;
+  concurrentTaskLimit: number;
   enabled: boolean;
+  skipRateLimit?: boolean;
 }
 
 function hashApiKey(key: string): string {
@@ -32,9 +35,9 @@ function generateApiKey(): string {
   return `hlx_${randomPart}`;
 }
 
-function parseArgs(): { env?: string; name?: string } {
+function parseArgs(): { env?: string; name?: string; skipRateLimit?: boolean } {
   const args = process.argv.slice(2);
-  const result: { env?: string; name?: string } = {};
+  const result: { env?: string; name?: string; skipRateLimit?: boolean } = {};
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--env" && args[i + 1]) {
@@ -43,6 +46,8 @@ function parseArgs(): { env?: string; name?: string } {
     } else if (args[i] === "--name" && args[i + 1]) {
       result.name = args[i + 1];
       i++;
+    } else if (args[i] === "--skip-rate-limit") {
+      result.skipRateLimit = true;
     }
   }
 
@@ -50,7 +55,7 @@ function parseArgs(): { env?: string; name?: string } {
 }
 
 async function seedApiKeys() {
-  const { env, name } = parseArgs();
+  const { env, name, skipRateLimit } = parseArgs();
 
   console.log("\n🔑 Generating Helios API Key...\n");
 
@@ -65,7 +70,9 @@ async function seedApiKeys() {
     keyHash,
     createdAt: new Date().toISOString(),
     rateLimit: 60, // 60 requests per minute
+    concurrentTaskLimit: 5, // 5 concurrent tasks
     enabled: true,
+    ...(skipRateLimit && { skipRateLimit: true }),
   };
 
   // Build wrangler command
@@ -81,6 +88,10 @@ async function seedApiKeys() {
   console.log(`Key ID: ${keyId}`);
   console.log(`Key Name: ${keyData.name}`);
   console.log(`Rate Limit: ${keyData.rateLimit} requests/minute`);
+  console.log(`Concurrent Task Limit: ${keyData.concurrentTaskLimit}`);
+  if (skipRateLimit) {
+    console.log(`Skip Rate Limit: ✓ enabled`);
+  }
   console.log("\nStoring key in Cloudflare KV...\n");
 
   try {

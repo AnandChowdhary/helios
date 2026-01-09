@@ -91,6 +91,7 @@ export interface ApiKey {
   rateLimit: number; // requests per minute
   concurrentTaskLimit: number; // maximum concurrent running tasks (default: 5)
   enabled: boolean;
+  skipRateLimit?: boolean; // Optional: bypass rate limiting for this key
 }
 
 /**

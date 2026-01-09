@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { rateLimitMiddleware } from "../../src/middleware/rateLimit";
+import type { ApiKey, Env } from "../../src/types";
 import { errorHandler } from "../../src/utils/errors";
-import type { Env, ApiKey } from "../../src/types";
 
 interface ErrorBody {
   error: { message: string };
@@ -159,5 +159,40 @@ describe("rateLimitMiddleware", () => {
     // Should still have 1 request remaining (limit 5, count 4)
     expect(res.status).toBe(200);
     expect(res.headers.get("X-RateLimit-Remaining")).toBe("0");
+  });
+
+  it("skips rate limiting when skipRateLimit flag is true", async () => {
+    const skipRateLimitApiKey: ApiKey = {
+      ...testApiKey,
+      id: "key_skip_rate_limit",
+      skipRateLimit: true,
+    };
+
+    // Create a new app with the skipRateLimit key
+    const skipApp = new Hono<{ Bindings: Env }>();
+    skipApp.onError(errorHandler);
+    skipApp.use("*", async (c, next) => {
+      c.set("apiKey", skipRateLimitApiKey);
+      await next();
+    });
+    skipApp.use("*", rateLimitMiddleware);
+    skipApp.get("/test", (c) => c.json({ success: true }));
+
+    const env = createMockEnv();
+
+    // Simulate being at the rate limit
+    const now = Date.now();
+    const windowKey = `${skipRateLimitApiKey.id}:${Math.floor(now / 60000)}`;
+    mockRateLimitsKV.set(windowKey, "999999"); // Way over the limit
+
+    // Request should still succeed because skipRateLimit is true
+    const res = await skipApp.fetch(new Request("http://localhost/test"), env);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as SuccessBody;
+    expect(body.success).toBe(true);
+
+    // Should not have rate limit headers since rate limiting was skipped
+    expect(res.headers.has("X-RateLimit-Limit")).toBe(false);
   });
 });

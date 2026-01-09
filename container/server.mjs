@@ -12,10 +12,10 @@
  * This server runs on port 8080 (Cloudflare Containers default port).
  */
 
-import { createServer } from "node:http";
-import { readFile, stat, writeFile } from "node:fs/promises";
-import { existsSync, watch } from "node:fs";
 import { exec } from "node:child_process";
+import { existsSync, watch } from "node:fs";
+import { readFile, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 
 const PORT = process.env.PORT || 8080;
 const RESULT_FILE = "/tmp/result.json";
@@ -81,7 +81,7 @@ function execCommand(command, options = {}) {
         } else {
           resolve(stdout.trim());
         }
-      },
+      }
     );
   });
 }
@@ -107,7 +107,7 @@ async function handlePush(req, res) {
     sendJson(
       res,
       { error: "Repository not found. Task may not have completed." },
-      400,
+      400
     );
     return;
   }
@@ -167,7 +167,7 @@ async function handlePush(req, res) {
     // Configure remote with token
     const remoteUrlWithToken = repoUrl.replace(
       "https://",
-      `https://${gitToken}@`,
+      `https://${gitToken}@`
     );
     await execCommand(`git remote set-url origin "${remoteUrlWithToken}"`);
 
@@ -232,12 +232,12 @@ async function createGitHubPR({ repoUrl, token, branch, title, body }) {
         Accept: "application/vnd.github.v3+json",
         "User-Agent": "Helios-Bot",
       },
-    },
+    }
   );
 
   if (!repoInfoResponse.ok) {
     throw new Error(
-      `Failed to get repository info: ${repoInfoResponse.status}`,
+      `Failed to get repository info: ${repoInfoResponse.status}`
     );
   }
 
@@ -261,7 +261,7 @@ async function createGitHubPR({ repoUrl, token, branch, title, body }) {
         head: branch,
         base: baseBranch,
       }),
-    },
+    }
   );
 
   if (!prResponse.ok) {
@@ -345,6 +345,9 @@ async function streamLogs(res) {
     }
   }
 
+  // Track if we've seen a terminal status
+  let statusCompletedCount = 0;
+
   // Also poll for the result file to know when to end the stream
   const pollInterval = setInterval(async () => {
     if (closed) {
@@ -366,9 +369,47 @@ async function streamLogs(res) {
           clearInterval(pollInterval);
           if (watcher) watcher.close();
           res.end();
+          return;
         }
       } catch {
         // Result not ready yet
+      }
+    }
+
+    // Fallback: Check status file for completion
+    // If status indicates done but no result file, wait a bit then generate result
+    if (existsSync(STATUS_FILE)) {
+      try {
+        const status = await readJsonFile(STATUS_FILE);
+        if (
+          status &&
+          (status.status === "completed" || status.status === "failed")
+        ) {
+          statusCompletedCount++;
+
+          // Wait a few polls for result file to appear
+          if (statusCompletedCount >= 3) {
+            // Generate a result from status if result file still missing
+            const fallbackResult = {
+              success: status.status === "completed",
+              summary: status.message || `Task ${status.status}`,
+              error:
+                status.status === "failed"
+                  ? status.message || "Task failed"
+                  : undefined,
+              filesChanged: [],
+              usage: { inputTokens: 0, outputTokens: 0 },
+            };
+            res.write(`event: complete\n`);
+            res.write(`data: ${JSON.stringify(fallbackResult)}\n\n`);
+            clearInterval(pollInterval);
+            if (watcher) watcher.close();
+            res.end();
+            return;
+          }
+        }
+      } catch {
+        // Status not ready yet
       }
     }
   }, 500);
@@ -378,8 +419,14 @@ async function streamLogs(res) {
     if (!closed) {
       clearInterval(pollInterval);
       if (watcher) watcher.close();
-      res.write(`event: timeout\n`);
-      res.write(`data: ${JSON.stringify({ error: "Stream timeout" })}\n\n`);
+      // Send as 'error' event type so clients recognize it as terminal
+      res.write(`event: error\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          code: "STREAM_TIMEOUT",
+          message: "Stream timeout after 10 minutes",
+        })}\n\n`
+      );
       res.end();
     }
   }, 600000);

@@ -1,10 +1,17 @@
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
-import type { Env, ApiKey } from "../types";
+import type { ApiKey, Env } from "../types";
 
 export const rateLimitMiddleware = createMiddleware<{ Bindings: Env }>(
   async (c, next) => {
     const apiKey = c.get("apiKey") as ApiKey;
+
+    // Skip rate limiting for keys with skipRateLimit flag
+    if (apiKey.skipRateLimit) {
+      await next();
+      return;
+    }
+
     const now = Date.now();
     const windowKey = `${apiKey.id}:${Math.floor(now / 60000)}`; // 1-minute window
 
@@ -27,13 +34,13 @@ export const rateLimitMiddleware = createMiddleware<{ Bindings: Env }>(
     c.header("X-RateLimit-Limit", apiKey.rateLimit.toString());
     c.header(
       "X-RateLimit-Remaining",
-      (apiKey.rateLimit - count - 1).toString(),
+      (apiKey.rateLimit - count - 1).toString()
     );
     c.header(
       "X-RateLimit-Reset",
-      ((Math.floor(now / 60000) + 1) * 60000).toString(),
+      ((Math.floor(now / 60000) + 1) * 60000).toString()
     );
 
     await next();
-  },
+  }
 );

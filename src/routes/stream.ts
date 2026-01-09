@@ -1,23 +1,23 @@
 import { Hono } from "hono";
-import type {
-  Env,
-  Task,
-  ApiKey,
-  WebSocketStreamMessage,
-  WebSocketClientMessage,
-} from "../types";
-import { hashApiKey } from "../middleware/auth";
 import {
-  getActiveTaskCount,
-  incrementActiveTaskCount,
-  decrementActiveTaskCount,
-} from "../middleware/concurrentTaskLimit";
-import {
-  startContainerTask,
   getContainerLogStream,
+  startContainerTask,
   stopContainerTask,
 } from "../container/runner";
+import { hashApiKey } from "../middleware/auth";
+import {
+  decrementActiveTaskCount,
+  getActiveTaskCount,
+  incrementActiveTaskCount,
+} from "../middleware/concurrentTaskLimit";
 import { CreateTaskSchema, type CreateTaskInput } from "../schemas/task";
+import type {
+  ApiKey,
+  Env,
+  Task,
+  WebSocketClientMessage,
+  WebSocketStreamMessage,
+} from "../types";
 
 export const streamRouter = new Hono<{ Bindings: Env }>();
 
@@ -25,7 +25,7 @@ export const streamRouter = new Hono<{ Bindings: Env }>();
 function createMessage(
   type: WebSocketStreamMessage["type"],
   taskId: string,
-  data: Record<string, unknown>,
+  data: Record<string, unknown>
 ): string {
   const message: WebSocketStreamMessage = {
     type,
@@ -39,7 +39,7 @@ function createMessage(
 // Helper to validate API key from various sources
 async function validateApiKey(
   env: Env,
-  request: Request,
+  request: Request
 ): Promise<ApiKey | null> {
   // Try Authorization header first
   const authHeader = request.headers.get("Authorization");
@@ -77,7 +77,7 @@ async function validateApiKey(
 // Check concurrent task limit
 async function checkConcurrentLimit(
   env: Env,
-  apiKey: ApiKey,
+  apiKey: ApiKey
 ): Promise<{ allowed: boolean; current: number; limit: number }> {
   const limit = apiKey.concurrentTaskLimit ?? 5;
   const current = await getActiveTaskCount(env, apiKey.id);
@@ -97,7 +97,7 @@ async function processTask(
   env: Env,
   apiKey: ApiKey,
   input: CreateTaskInput,
-  taskId: string,
+  taskId: string
 ): Promise<void> {
   const task: Task = {
     id: taskId,
@@ -122,7 +122,7 @@ async function processTask(
     createMessage("status", taskId, {
       status: "pending",
       message: "Task created",
-    }),
+    })
   );
 
   try {
@@ -135,7 +135,7 @@ async function processTask(
       createMessage("status", taskId, {
         status: "starting",
         message: "Starting container...",
-      }),
+      })
     );
 
     // Start the container
@@ -161,7 +161,7 @@ async function processTask(
       createMessage("status", taskId, {
         status: "running",
         message: "Task is running...",
-      }),
+      })
     );
 
     // Get the log stream from the container
@@ -171,6 +171,53 @@ async function processTask(
       const reader = logResponse.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let currentEvent = "message";
+
+      // Helper function to process SSE lines
+      const processLine = async (line: string) => {
+        if (line.startsWith("event: ")) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          const eventData = line.slice(6);
+
+          // Forward message via WebSocket
+          try {
+            const parsedData = JSON.parse(eventData);
+            server.send(
+              createMessage(
+                currentEvent as WebSocketStreamMessage["type"],
+                taskId,
+                parsedData
+              )
+            );
+
+            // If we got a complete event, update task
+            if (currentEvent === "complete") {
+              task.status = parsedData.success ? "completed" : "failed";
+              task.completedAt = new Date().toISOString();
+              task.result = parsedData;
+              await env.TASKS.put(taskId, JSON.stringify(task));
+
+              // Store artifacts
+              if (parsedData.diff) {
+                await env.ARTIFACTS.put(
+                  `${taskId}/diff.patch`,
+                  parsedData.diff
+                );
+              }
+            }
+          } catch {
+            // If data is not JSON, send as-is
+            server.send(
+              createMessage(
+                currentEvent as WebSocketStreamMessage["type"],
+                taskId,
+                { raw: eventData }
+              )
+            );
+          }
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -182,50 +229,16 @@ async function processTask(
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
-        let currentEvent = "message";
         for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            currentEvent = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            const eventData = line.slice(6);
+          await processLine(line);
+        }
+      }
 
-            // Forward message via WebSocket
-            try {
-              const parsedData = JSON.parse(eventData);
-              server.send(
-                createMessage(
-                  currentEvent as WebSocketStreamMessage["type"],
-                  taskId,
-                  parsedData,
-                ),
-              );
-
-              // If we got a complete event, update task
-              if (currentEvent === "complete") {
-                task.status = parsedData.success ? "completed" : "failed";
-                task.completedAt = new Date().toISOString();
-                task.result = parsedData;
-                await env.TASKS.put(taskId, JSON.stringify(task));
-
-                // Store artifacts
-                if (parsedData.diff) {
-                  await env.ARTIFACTS.put(
-                    `${taskId}/diff.patch`,
-                    parsedData.diff,
-                  );
-                }
-              }
-            } catch {
-              // If data is not JSON, send as-is
-              server.send(
-                createMessage(
-                  currentEvent as WebSocketStreamMessage["type"],
-                  taskId,
-                  { raw: eventData },
-                ),
-              );
-            }
-          }
+      // Process any remaining content in buffer after stream ends
+      if (buffer.trim()) {
+        const remainingLines = buffer.split("\n");
+        for (const line of remainingLines) {
+          await processLine(line);
         }
       }
     } else {
@@ -234,7 +247,7 @@ async function processTask(
         createMessage("error", taskId, {
           code: "STREAM_ERROR",
           message: "Failed to connect to container log stream",
-        }),
+        })
       );
 
       task.status = "failed";
@@ -260,7 +273,7 @@ async function processTask(
       createMessage("error", taskId, {
         code: "TASK_ERROR",
         message: errorMessage,
-      }),
+      })
     );
 
     task.status = "failed";
@@ -315,7 +328,7 @@ streamRouter.get("/", async (c) => {
             "Expected WebSocket upgrade request. Include Upgrade: websocket header.",
         },
       },
-      426,
+      426
     );
   }
 
@@ -329,7 +342,7 @@ streamRouter.get("/", async (c) => {
             "Invalid or missing API key. Provide via Authorization header, api_key query parameter, or Sec-WebSocket-Protocol: api-key, <your-key>",
         },
       },
-      401,
+      401
     );
   }
 
@@ -349,7 +362,7 @@ streamRouter.get("/", async (c) => {
     createMessage("connected", "", {
       message:
         "Connected to Helios WebSocket. Send task configuration to begin.",
-    }),
+    })
   );
 
   // Handle messages
@@ -358,8 +371,8 @@ streamRouter.get("/", async (c) => {
       typeof event.data === "string"
         ? event.data
         : event.data instanceof ArrayBuffer
-          ? new TextDecoder().decode(event.data)
-          : "";
+        ? new TextDecoder().decode(event.data)
+        : "";
 
     let data: CreateTaskInput | WebSocketClientMessage;
     try {
@@ -369,7 +382,7 @@ streamRouter.get("/", async (c) => {
         createMessage("error", currentTaskId || "", {
           code: "INVALID_JSON",
           message: "Invalid JSON message",
-        }),
+        })
       );
       return;
     }
@@ -381,7 +394,7 @@ streamRouter.get("/", async (c) => {
         server.send(
           createMessage("status", currentTaskId || "", {
             status: "pong",
-          }),
+          })
         );
         return;
       }
@@ -399,7 +412,7 @@ streamRouter.get("/", async (c) => {
           server.send(
             createMessage("status", currentTaskId, {
               status: "cancelled",
-            }),
+            })
           );
           currentTaskId = null;
           taskStarted = false;
@@ -408,7 +421,7 @@ streamRouter.get("/", async (c) => {
             createMessage("error", currentTaskId || "", {
               code: "CANCEL_FAILED",
               message: "Failed to cancel task",
-            }),
+            })
           );
         }
         return;
@@ -424,7 +437,7 @@ streamRouter.get("/", async (c) => {
           code: "TASK_ALREADY_RUNNING",
           message:
             "A task is already running on this connection. Wait for it to complete or send a cancel command.",
-        }),
+        })
       );
       return;
     }
@@ -440,7 +453,7 @@ streamRouter.get("/", async (c) => {
             path: issue.path.join("."),
             message: issue.message,
           })),
-        }),
+        })
       );
       return;
     }
@@ -456,7 +469,7 @@ streamRouter.get("/", async (c) => {
           message: `Concurrent task limit exceeded. You have ${limitCheck.current} active tasks (limit: ${limitCheck.limit}).`,
           current: limitCheck.current,
           limit: limitCheck.limit,
-        }),
+        })
       );
       return;
     }
@@ -517,4 +530,4 @@ streamRouter.get("/", async (c) => {
 });
 
 // Export helper for testing
-export { createMessage, validateApiKey, checkConcurrentLimit };
+export { checkConcurrentLimit, createMessage, validateApiKey };

@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { readFileSync, existsSync } from "fs";
-import { join, dirname } from "path";
+import { existsSync, readFileSync } from "fs";
+import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { describe, expect, it } from "vitest";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const containerDir = join(__dirname, "../../container");
@@ -103,7 +103,7 @@ describe("Container", () => {
     it("supports timeout configuration", () => {
       const content = readFileSync(entrypointPath, "utf-8");
       expect(content).toContain("TIMEOUT");
-      expect(content).toContain('timeout "$timeout"');
+      expect(content).toContain('timeout "$timeout_secs"');
     });
 
     it("handles task status events", () => {

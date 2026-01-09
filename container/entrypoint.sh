@@ -34,6 +34,27 @@ echo "HTTP server started (PID: $HTTP_SERVER_PID)"
 
 # Cleanup function to stop HTTP server on exit
 cleanup() {
+  local exit_code=$?
+  echo "Cleanup triggered (exit code: $exit_code)"
+  
+  # Ensure a result file exists so the server can send a complete event
+  if [[ ! -f "$RESULT_FILE" ]]; then
+    echo "Writing emergency result file..."
+    local error_result
+    error_result=$(jq -n \
+      --argjson success false \
+      --arg summary "Task terminated unexpectedly" \
+      --arg error "Process exited with code: $exit_code" \
+      '{
+        success: $success,
+        summary: $summary,
+        error: $error,
+        filesChanged: [],
+        usage: {inputTokens: 0, outputTokens: 0}
+      }' 2>/dev/null || echo '{"success":false,"error":"Task terminated unexpectedly"}')
+    echo "$error_result" > "$RESULT_FILE"
+  fi
+  
   echo "Stopping HTTP server..."
   kill "$HTTP_SERVER_PID" 2>/dev/null || true
   wait "$HTTP_SERVER_PID" 2>/dev/null || true
@@ -132,7 +153,7 @@ clone_repository() {
 run_claude() {
   local model="${MODEL:-claude-sonnet-4-5}"
   local max_turns="${MAX_TURNS:-10}"
-  local timeout="${TIMEOUT:-300}"
+  local timeout_secs="${TIMEOUT:-300}"
 
   update_status "running" "Starting Claude Code (model: $model, max_turns: $max_turns)"
 
@@ -151,8 +172,17 @@ run_claude() {
   fi
 
   # Run Claude Code with timeout, streaming output
+  # Embed exit code in output stream to capture it reliably
   local exit_code=0
-  timeout "$timeout" claude "${claude_args[@]}" 2>&1 | while IFS= read -r line; do
+  local captured_exit=""
+  
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # Check for our exit code marker
+    if [[ "$line" == __CLAUDE_EXIT_CODE__* ]]; then
+      captured_exit="${line#__CLAUDE_EXIT_CODE__}"
+      continue
+    fi
+    
     # Forward Claude's output
     if echo "$line" | jq -e . >/dev/null 2>&1; then
       # Valid JSON from Claude - forward with wrapper
@@ -165,14 +195,19 @@ run_claude() {
       escaped_line=$(echo "$line" | jq -Rs '.')
       log_event "log" "{\"message\":$escaped_line}"
     fi
-  done || exit_code=$?
+  done < <(timeout "$timeout_secs" claude "${claude_args[@]}" 2>&1; echo "__CLAUDE_EXIT_CODE__$?")
+  
+  # Use the captured exit code
+  if [[ -n "$captured_exit" ]]; then
+    exit_code="$captured_exit"
+  fi
 
   if [[ $exit_code -eq 124 ]]; then
-    log_error "TIMEOUT" "Task exceeded time limit of ${timeout}s"
+    log_error "TIMEOUT" "Task exceeded time limit of ${timeout_secs}s"
     return 124
   fi
 
-  return $exit_code
+  return "$exit_code"
 }
 
 # Collect results after Claude Code execution

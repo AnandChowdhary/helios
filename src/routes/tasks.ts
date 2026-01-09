@@ -153,6 +153,44 @@ tasksRouter.post(
           const reader = logResponse.body.getReader();
           const decoder = new TextDecoder();
           let buffer = "";
+          let currentEvent = "message";
+
+          // Helper function to process SSE lines
+          const processLine = async (line: string) => {
+            if (line.startsWith("event: ")) {
+              currentEvent = line.slice(7).trim();
+            } else if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              await stream.writeSSE({
+                event: currentEvent,
+                data,
+              });
+
+              // If we got a complete event, update task and stop streaming
+              if (currentEvent === "complete") {
+                try {
+                  const result = JSON.parse(data);
+                  task.status = result.success ? "completed" : "failed";
+                  task.completedAt = new Date().toISOString();
+                  task.result = result;
+                  await c.env.TASKS.put(taskId, JSON.stringify(task));
+
+                  // Track task completion with usage data
+                  await trackTaskCompleted(c.env, apiKey.id, task);
+
+                  // Store artifacts
+                  if (result.diff) {
+                    await c.env.ARTIFACTS.put(
+                      `${taskId}/diff.patch`,
+                      result.diff,
+                    );
+                  }
+                } catch {
+                  // Ignore parse errors
+                }
+              }
+            }
+          };
 
           while (true) {
             const { done, value } = await reader.read();
@@ -164,41 +202,16 @@ tasksRouter.post(
             const lines = buffer.split("\n");
             buffer = lines.pop() || "";
 
-            let currentEvent = "message";
             for (const line of lines) {
-              if (line.startsWith("event: ")) {
-                currentEvent = line.slice(7).trim();
-              } else if (line.startsWith("data: ")) {
-                const data = line.slice(6);
-                await stream.writeSSE({
-                  event: currentEvent,
-                  data,
-                });
+              await processLine(line);
+            }
+          }
 
-                // If we got a complete event, update task and stop streaming
-                if (currentEvent === "complete") {
-                  try {
-                    const result = JSON.parse(data);
-                    task.status = result.success ? "completed" : "failed";
-                    task.completedAt = new Date().toISOString();
-                    task.result = result;
-                    await c.env.TASKS.put(taskId, JSON.stringify(task));
-
-                    // Track task completion with usage data
-                    await trackTaskCompleted(c.env, apiKey.id, task);
-
-                    // Store artifacts
-                    if (result.diff) {
-                      await c.env.ARTIFACTS.put(
-                        `${taskId}/diff.patch`,
-                        result.diff,
-                      );
-                    }
-                  } catch {
-                    // Ignore parse errors
-                  }
-                }
-              }
+          // Process any remaining content in buffer after stream ends
+          if (buffer.trim()) {
+            const remainingLines = buffer.split("\n");
+            for (const line of remainingLines) {
+              await processLine(line);
             }
           }
         } else {
