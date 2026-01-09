@@ -19,6 +19,7 @@ from .types import (
     Repository,
     RepositoryCredentials,
     RepositoryInfo,
+    RetryConfig,
     SSEEvent,
     SSEEventType,
     Task,
@@ -40,6 +41,7 @@ __all__ = [
     "HeliosError",
     # Config
     "HeliosConfig",
+    "RetryConfig",
     # Task creation
     "CreateAsyncTaskInput",
     "CreateStreamTaskInput",

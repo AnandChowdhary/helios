@@ -273,6 +273,22 @@ export interface APIError {
 }
 
 /**
+ * Retry configuration for automatic exponential backoff
+ */
+export interface RetryConfig {
+  /** Maximum number of retry attempts (default: 3) */
+  maxRetries?: number;
+  /** Initial delay in milliseconds before first retry (default: 1000) */
+  initialDelayMs?: number;
+  /** Maximum delay in milliseconds between retries (default: 10000) */
+  maxDelayMs?: number;
+  /** Backoff multiplier (default: 2) */
+  backoffMultiplier?: number;
+  /** Whether to retry on rate limit errors (429) (default: true) */
+  retryOnRateLimit?: boolean;
+}
+
+/**
  * Helios client configuration
  */
 export interface HeliosConfig {
@@ -280,6 +296,8 @@ export interface HeliosConfig {
   apiKey: string;
   /** Base URL (defaults to production) */
   baseUrl?: string;
+  /** Retry configuration for transient failures (default: enabled with sensible defaults) */
+  retry?: RetryConfig | false;
 }
 
 /**

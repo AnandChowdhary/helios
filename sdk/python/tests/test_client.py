@@ -18,6 +18,7 @@ from helios_sdk import (
     PushTaskInput,
     Repository,
     RepositoryCredentials,
+    RetryConfig,
 )
 
 
@@ -534,3 +535,262 @@ class TestErrorHandling:
             client.get_task("task_123")
 
         assert exc_info.value.status == 429
+
+
+class TestHeliosErrorRetryable:
+    """Tests for HeliosError retryable property."""
+
+    def test_5xx_errors_are_retryable(self):
+        """5xx errors should be marked as retryable."""
+        error500 = HeliosError("Server error", 500)
+        error503 = HeliosError("Service unavailable", 503)
+        assert error500.retryable is True
+        assert error503.retryable is True
+
+    def test_429_is_retryable(self):
+        """429 rate limit should be marked as retryable."""
+        error = HeliosError("Rate limited", 429)
+        assert error.retryable is True
+
+    def test_4xx_errors_are_not_retryable(self):
+        """4xx client errors should not be retryable (except 429)."""
+        error400 = HeliosError("Bad request", 400)
+        error401 = HeliosError("Unauthorized", 401)
+        error404 = HeliosError("Not found", 404)
+        assert error400.retryable is False
+        assert error401.retryable is False
+        assert error404.retryable is False
+
+
+class TestRetryBehavior:
+    """Tests for retry functionality."""
+
+    @respx.mock
+    def test_retries_on_500_and_succeeds(self):
+        """Should retry on 500 server error and succeed on later attempt."""
+        call_count = 0
+
+        def response_callback(request):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                return httpx.Response(
+                    500,
+                    json={"error": {"message": "Server error"}},
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "id": "task_123",
+                    "status": "completed",
+                    "prompt": "Test",
+                    "repository": {"url": "https://github.com/test/repo.git", "branch": "main"},
+                    "createdAt": "2025-01-08T10:00:00Z",
+                },
+            )
+
+        respx.get(f"{BASE_URL}/v1/tasks/task_123").mock(side_effect=response_callback)
+
+        client = HeliosClient(
+            HeliosConfig(
+                api_key="test-key",
+                base_url=BASE_URL,
+                retry=RetryConfig(max_retries=3, initial_delay_ms=10, max_delay_ms=50),
+            )
+        )
+        task = client.get_task("task_123")
+
+        assert task.id == "task_123"
+        assert call_count == 3
+
+    @respx.mock
+    def test_retries_on_429_rate_limit(self):
+        """Should retry on 429 rate limit."""
+        call_count = 0
+
+        def response_callback(request):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return httpx.Response(
+                    429,
+                    json={"error": {"message": "Rate limited", "code": "RATE_LIMIT_EXCEEDED"}},
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "id": "task_123",
+                    "status": "completed",
+                    "prompt": "Test",
+                    "repository": {"url": "https://github.com/test/repo.git", "branch": "main"},
+                    "createdAt": "2025-01-08T10:00:00Z",
+                },
+            )
+
+        respx.get(f"{BASE_URL}/v1/tasks/task_123").mock(side_effect=response_callback)
+
+        client = HeliosClient(
+            HeliosConfig(
+                api_key="test-key",
+                base_url=BASE_URL,
+                retry=RetryConfig(max_retries=2, initial_delay_ms=10),
+            )
+        )
+        task = client.get_task("task_123")
+
+        assert task.id == "task_123"
+        assert call_count == 2
+
+    @respx.mock
+    def test_does_not_retry_on_400(self):
+        """Should not retry on 400 client error."""
+        respx.get(f"{BASE_URL}/v1/tasks/task_123").mock(
+            return_value=httpx.Response(
+                400,
+                json={"error": {"message": "Bad request"}},
+            )
+        )
+
+        client = HeliosClient(
+            HeliosConfig(
+                api_key="test-key",
+                base_url=BASE_URL,
+                retry=RetryConfig(max_retries=3, initial_delay_ms=10),
+            )
+        )
+
+        with pytest.raises(HeliosError) as exc_info:
+            client.get_task("task_123")
+
+        assert exc_info.value.message == "Bad request"
+        # Only 1 call made (no retries)
+        assert len(respx.calls) == 1
+
+    @respx.mock
+    def test_exhausts_retries_and_raises(self):
+        """Should exhaust retries and raise the last error."""
+        respx.get(f"{BASE_URL}/v1/tasks/task_123").mock(
+            return_value=httpx.Response(
+                503,
+                json={"error": {"message": "Service unavailable"}},
+            )
+        )
+
+        client = HeliosClient(
+            HeliosConfig(
+                api_key="test-key",
+                base_url=BASE_URL,
+                retry=RetryConfig(max_retries=2, initial_delay_ms=10),
+            )
+        )
+
+        with pytest.raises(HeliosError) as exc_info:
+            client.get_task("task_123")
+
+        assert exc_info.value.message == "Service unavailable"
+        assert len(respx.calls) == 3  # 1 initial + 2 retries
+
+    @respx.mock
+    def test_no_retry_without_config(self):
+        """Should not retry when retry config is not provided."""
+        respx.get(f"{BASE_URL}/v1/tasks/task_123").mock(
+            return_value=httpx.Response(
+                500,
+                json={"error": {"message": "Server error"}},
+            )
+        )
+
+        client = HeliosClient(
+            HeliosConfig(api_key="test-key", base_url=BASE_URL)
+        )
+
+        with pytest.raises(HeliosError) as exc_info:
+            client.get_task("task_123")
+
+        assert exc_info.value.message == "Server error"
+        assert len(respx.calls) == 1
+
+    @respx.mock
+    def test_respects_retry_on_rate_limit_false(self):
+        """Should not retry on 429 when retry_on_rate_limit is False."""
+        respx.get(f"{BASE_URL}/v1/tasks/task_123").mock(
+            return_value=httpx.Response(
+                429,
+                json={"error": {"message": "Rate limited"}},
+            )
+        )
+
+        client = HeliosClient(
+            HeliosConfig(
+                api_key="test-key",
+                base_url=BASE_URL,
+                retry=RetryConfig(max_retries=3, initial_delay_ms=10, retry_on_rate_limit=False),
+            )
+        )
+
+        with pytest.raises(HeliosError) as exc_info:
+            client.get_task("task_123")
+
+        assert exc_info.value.message == "Rate limited"
+        assert len(respx.calls) == 1
+
+    @respx.mock
+    def test_includes_error_code(self):
+        """Should include error code from response."""
+        respx.get(f"{BASE_URL}/v1/tasks/task_123").mock(
+            return_value=httpx.Response(
+                404,
+                json={"error": {"message": "Task not found", "code": "TASK_NOT_FOUND"}},
+            )
+        )
+
+        client = HeliosClient(HeliosConfig(api_key="test-key", base_url=BASE_URL))
+
+        with pytest.raises(HeliosError) as exc_info:
+            client.get_task("task_123")
+
+        assert exc_info.value.code == "TASK_NOT_FOUND"
+        assert exc_info.value.status == 404
+
+
+class TestAsyncRetryBehavior:
+    """Tests for async client retry functionality."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_async_retries_on_500(self):
+        """Should retry on 500 server error in async client."""
+        call_count = 0
+
+        def response_callback(request):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                return httpx.Response(
+                    500,
+                    json={"error": {"message": "Server error"}},
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "id": "task_123",
+                    "status": "completed",
+                    "prompt": "Test",
+                    "repository": {"url": "https://github.com/test/repo.git", "branch": "main"},
+                    "createdAt": "2025-01-08T10:00:00Z",
+                },
+            )
+
+        respx.get(f"{BASE_URL}/v1/tasks/task_123").mock(side_effect=response_callback)
+
+        async with AsyncHeliosClient(
+            HeliosConfig(
+                api_key="test-key",
+                base_url=BASE_URL,
+                retry=RetryConfig(max_retries=3, initial_delay_ms=10),
+            )
+        ) as client:
+            task = await client.get_task("task_123")
+
+        assert task.id == "task_123"
+        assert call_count == 2

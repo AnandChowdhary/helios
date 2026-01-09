@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Union
 
@@ -23,6 +24,7 @@ from .types import (
     PushTaskInput,
     PushTaskResponse,
     RepositoryInfo,
+    RetryConfig,
     SSEEvent,
     Task,
     TaskListPagination,
@@ -45,6 +47,26 @@ class HeliosError(Exception):
         self.message = message
         self.status = status
         self.code = code
+        # 5xx errors and rate limits are retryable
+        self.retryable = status is None or status >= 500 or status == 429
+
+
+def _is_retryable_status(status: int, retry_on_rate_limit: bool) -> bool:
+    """Check if a status code is retryable."""
+    if status >= 500:
+        return True
+    if status == 429 and retry_on_rate_limit:
+        return True
+    return False
+
+
+def _calculate_backoff_delay(attempt: int, config: RetryConfig) -> float:
+    """Calculate delay for exponential backoff with jitter."""
+    base_delay = config.initial_delay_ms * (config.backoff_multiplier ** attempt)
+    delay = min(base_delay, config.max_delay_ms)
+    # Add jitter (±10%)
+    jitter = delay * 0.1 * (random.random() * 2 - 1)
+    return (delay + jitter) / 1000  # Return seconds
 
 
 def _build_payload(input_obj: Union[CreateAsyncTaskInput, CreateStreamTaskInput]) -> dict:
@@ -177,6 +199,7 @@ class HeliosClient:
         self._api_key = config.api_key
         self._base_url = config.base_url.rstrip("/")
         self._client = httpx.Client(timeout=300.0)
+        self._retry_config = config.retry
 
     def __enter__(self) -> "HeliosClient":
         return self
@@ -188,19 +211,23 @@ class HeliosClient:
         """Close the HTTP client."""
         self._client.close()
 
-    def _extract_error_message(self, response: httpx.Response) -> str:
-        """Extract error message from a failed response."""
+    def _extract_error(
+        self, response: httpx.Response
+    ) -> tuple[str, Optional[str]]:
+        """Extract error message and code from a failed response."""
+        error_message = f"Request failed with status {response.status_code}"
+        error_code = None
         try:
             error_data = response.json()
             if isinstance(error_data, dict) and "error" in error_data:
                 if isinstance(error_data["error"], dict):
-                    return error_data["error"].get(
-                        "message", f"Request failed with status {response.status_code}"
-                    )
-                return str(error_data["error"])
+                    error_message = error_data["error"].get("message", error_message)
+                    error_code = error_data["error"].get("code")
+                else:
+                    error_message = str(error_data["error"])
         except Exception:
             pass
-        return f"Request failed with status {response.status_code}"
+        return error_message, error_code
 
     def _request(
         self,
@@ -208,39 +235,141 @@ class HeliosClient:
         path: str,
         body: Optional[dict] = None,
     ) -> Any:
-        """Make an authenticated request to the API."""
+        """Make an authenticated request to the API with retry support."""
         url = f"{self._base_url}{path}"
         headers = {"Authorization": f"Bearer {self._api_key}"}
 
         if body:
             headers["Content-Type"] = "application/json"
 
-        response = self._client.request(
-            method,
-            url,
-            headers=headers,
-            json=body,
+        last_error: Optional[HeliosError] = None
+        max_attempts = (
+            self._retry_config.max_retries + 1 if self._retry_config else 1
         )
 
-        if not response.is_success:
-            error_message = self._extract_error_message(response)
-            raise HeliosError(error_message, response.status_code)
+        for attempt in range(max_attempts):
+            try:
+                response = self._client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    json=body,
+                )
 
-        return response.json()
+                if not response.is_success:
+                    error_message, error_code = self._extract_error(response)
+                    error = HeliosError(
+                        error_message, response.status_code, error_code
+                    )
+
+                    # Check if we should retry
+                    if (
+                        self._retry_config
+                        and attempt < self._retry_config.max_retries
+                        and _is_retryable_status(
+                            response.status_code,
+                            self._retry_config.retry_on_rate_limit,
+                        )
+                    ):
+                        last_error = error
+                        delay = _calculate_backoff_delay(attempt, self._retry_config)
+                        time.sleep(delay)
+                        continue
+
+                    raise error
+
+                return response.json()
+
+            except httpx.RequestError as e:
+                # Network errors are retryable
+                if (
+                    self._retry_config
+                    and attempt < self._retry_config.max_retries
+                ):
+                    last_error = HeliosError(
+                        str(e) or "Network error", None, "NETWORK_ERROR"
+                    )
+                    delay = _calculate_backoff_delay(attempt, self._retry_config)
+                    time.sleep(delay)
+                    continue
+
+                raise HeliosError(
+                    str(e) or "Network error", None, "NETWORK_ERROR"
+                ) from e
+
+            except HeliosError:
+                raise
+
+            except Exception as e:
+                raise HeliosError(str(e), None, "UNKNOWN_ERROR") from e
+
+        # If we exhausted all retries, raise the last error
+        if last_error:
+            raise last_error
+        raise HeliosError("Request failed after retries")
 
     def _request_text(self, path: str) -> str:
-        """Make an authenticated request that returns text."""
+        """Make an authenticated request that returns text with retry support."""
         url = f"{self._base_url}{path}"
-        response = self._client.get(
-            url,
-            headers={"Authorization": f"Bearer {self._api_key}"},
+        headers = {"Authorization": f"Bearer {self._api_key}"}
+
+        last_error: Optional[HeliosError] = None
+        max_attempts = (
+            self._retry_config.max_retries + 1 if self._retry_config else 1
         )
 
-        if not response.is_success:
-            error_message = self._extract_error_message(response)
-            raise HeliosError(error_message, response.status_code)
+        for attempt in range(max_attempts):
+            try:
+                response = self._client.get(url, headers=headers)
 
-        return response.text
+                if not response.is_success:
+                    error_message, error_code = self._extract_error(response)
+                    error = HeliosError(
+                        error_message, response.status_code, error_code
+                    )
+
+                    if (
+                        self._retry_config
+                        and attempt < self._retry_config.max_retries
+                        and _is_retryable_status(
+                            response.status_code,
+                            self._retry_config.retry_on_rate_limit,
+                        )
+                    ):
+                        last_error = error
+                        delay = _calculate_backoff_delay(attempt, self._retry_config)
+                        time.sleep(delay)
+                        continue
+
+                    raise error
+
+                return response.text
+
+            except httpx.RequestError as e:
+                if (
+                    self._retry_config
+                    and attempt < self._retry_config.max_retries
+                ):
+                    last_error = HeliosError(
+                        str(e) or "Network error", None, "NETWORK_ERROR"
+                    )
+                    delay = _calculate_backoff_delay(attempt, self._retry_config)
+                    time.sleep(delay)
+                    continue
+
+                raise HeliosError(
+                    str(e) or "Network error", None, "NETWORK_ERROR"
+                ) from e
+
+            except HeliosError:
+                raise
+
+            except Exception as e:
+                raise HeliosError(str(e), None, "UNKNOWN_ERROR") from e
+
+        if last_error:
+            raise last_error
+        raise HeliosError("Request failed after retries")
 
     def create_task_async(self, input: CreateAsyncTaskInput) -> AsyncTaskResponse:
         """Create and run a task asynchronously.
@@ -325,8 +454,8 @@ class HeliosClient:
             if not response.is_success:
                 # Read full response for error
                 response.read()
-                error_message = self._extract_error_message(response)
-                raise HeliosError(error_message, response.status_code)
+                error_message, error_code = self._extract_error(response)
+                raise HeliosError(error_message, response.status_code, error_code)
 
             buffer = ""
             for chunk in response.iter_text():
@@ -578,6 +707,7 @@ class AsyncHeliosClient:
         self._api_key = config.api_key
         self._base_url = config.base_url.rstrip("/")
         self._client = httpx.AsyncClient(timeout=300.0)
+        self._retry_config = config.retry
 
     async def __aenter__(self) -> "AsyncHeliosClient":
         return self
@@ -589,19 +719,23 @@ class AsyncHeliosClient:
         """Close the HTTP client."""
         await self._client.aclose()
 
-    def _extract_error_message(self, response: httpx.Response) -> str:
-        """Extract error message from a failed response."""
+    def _extract_error(
+        self, response: httpx.Response
+    ) -> tuple[str, Optional[str]]:
+        """Extract error message and code from a failed response."""
+        error_message = f"Request failed with status {response.status_code}"
+        error_code = None
         try:
             error_data = response.json()
             if isinstance(error_data, dict) and "error" in error_data:
                 if isinstance(error_data["error"], dict):
-                    return error_data["error"].get(
-                        "message", f"Request failed with status {response.status_code}"
-                    )
-                return str(error_data["error"])
+                    error_message = error_data["error"].get("message", error_message)
+                    error_code = error_data["error"].get("code")
+                else:
+                    error_message = str(error_data["error"])
         except Exception:
             pass
-        return f"Request failed with status {response.status_code}"
+        return error_message, error_code
 
     async def _request(
         self,
@@ -609,39 +743,142 @@ class AsyncHeliosClient:
         path: str,
         body: Optional[dict] = None,
     ) -> Any:
-        """Make an authenticated request to the API."""
+        """Make an authenticated request to the API with retry support."""
+        import asyncio
+
         url = f"{self._base_url}{path}"
         headers = {"Authorization": f"Bearer {self._api_key}"}
 
         if body:
             headers["Content-Type"] = "application/json"
 
-        response = await self._client.request(
-            method,
-            url,
-            headers=headers,
-            json=body,
+        last_error: Optional[HeliosError] = None
+        max_attempts = (
+            self._retry_config.max_retries + 1 if self._retry_config else 1
         )
 
-        if not response.is_success:
-            error_message = self._extract_error_message(response)
-            raise HeliosError(error_message, response.status_code)
+        for attempt in range(max_attempts):
+            try:
+                response = await self._client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    json=body,
+                )
 
-        return response.json()
+                if not response.is_success:
+                    error_message, error_code = self._extract_error(response)
+                    error = HeliosError(
+                        error_message, response.status_code, error_code
+                    )
+
+                    if (
+                        self._retry_config
+                        and attempt < self._retry_config.max_retries
+                        and _is_retryable_status(
+                            response.status_code,
+                            self._retry_config.retry_on_rate_limit,
+                        )
+                    ):
+                        last_error = error
+                        delay = _calculate_backoff_delay(attempt, self._retry_config)
+                        await asyncio.sleep(delay)
+                        continue
+
+                    raise error
+
+                return response.json()
+
+            except httpx.RequestError as e:
+                if (
+                    self._retry_config
+                    and attempt < self._retry_config.max_retries
+                ):
+                    last_error = HeliosError(
+                        str(e) or "Network error", None, "NETWORK_ERROR"
+                    )
+                    delay = _calculate_backoff_delay(attempt, self._retry_config)
+                    await asyncio.sleep(delay)
+                    continue
+
+                raise HeliosError(
+                    str(e) or "Network error", None, "NETWORK_ERROR"
+                ) from e
+
+            except HeliosError:
+                raise
+
+            except Exception as e:
+                raise HeliosError(str(e), None, "UNKNOWN_ERROR") from e
+
+        if last_error:
+            raise last_error
+        raise HeliosError("Request failed after retries")
 
     async def _request_text(self, path: str) -> str:
-        """Make an authenticated request that returns text."""
+        """Make an authenticated request that returns text with retry support."""
+        import asyncio
+
         url = f"{self._base_url}{path}"
-        response = await self._client.get(
-            url,
-            headers={"Authorization": f"Bearer {self._api_key}"},
+        headers = {"Authorization": f"Bearer {self._api_key}"}
+
+        last_error: Optional[HeliosError] = None
+        max_attempts = (
+            self._retry_config.max_retries + 1 if self._retry_config else 1
         )
 
-        if not response.is_success:
-            error_message = self._extract_error_message(response)
-            raise HeliosError(error_message, response.status_code)
+        for attempt in range(max_attempts):
+            try:
+                response = await self._client.get(url, headers=headers)
 
-        return response.text
+                if not response.is_success:
+                    error_message, error_code = self._extract_error(response)
+                    error = HeliosError(
+                        error_message, response.status_code, error_code
+                    )
+
+                    if (
+                        self._retry_config
+                        and attempt < self._retry_config.max_retries
+                        and _is_retryable_status(
+                            response.status_code,
+                            self._retry_config.retry_on_rate_limit,
+                        )
+                    ):
+                        last_error = error
+                        delay = _calculate_backoff_delay(attempt, self._retry_config)
+                        await asyncio.sleep(delay)
+                        continue
+
+                    raise error
+
+                return response.text
+
+            except httpx.RequestError as e:
+                if (
+                    self._retry_config
+                    and attempt < self._retry_config.max_retries
+                ):
+                    last_error = HeliosError(
+                        str(e) or "Network error", None, "NETWORK_ERROR"
+                    )
+                    delay = _calculate_backoff_delay(attempt, self._retry_config)
+                    await asyncio.sleep(delay)
+                    continue
+
+                raise HeliosError(
+                    str(e) or "Network error", None, "NETWORK_ERROR"
+                ) from e
+
+            except HeliosError:
+                raise
+
+            except Exception as e:
+                raise HeliosError(str(e), None, "UNKNOWN_ERROR") from e
+
+        if last_error:
+            raise last_error
+        raise HeliosError("Request failed after retries")
 
     async def create_task_async(
         self, input: CreateAsyncTaskInput
@@ -707,8 +944,8 @@ class AsyncHeliosClient:
         ) as response:
             if not response.is_success:
                 await response.aread()
-                error_message = self._extract_error_message(response)
-                raise HeliosError(error_message, response.status_code)
+                error_message, error_code = self._extract_error(response)
+                raise HeliosError(error_message, response.status_code, error_code)
 
             buffer = ""
             async for chunk in response.aiter_text():

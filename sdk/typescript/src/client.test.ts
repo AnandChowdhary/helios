@@ -383,4 +383,211 @@ describe("HeliosError", () => {
     expect(error.status).toBe(404);
     expect(error.code).toBe("NOT_FOUND");
   });
+
+  it("marks 5xx errors as retryable", () => {
+    const error500 = new HeliosError("Server error", 500);
+    const error503 = new HeliosError("Service unavailable", 503);
+    expect(error500.retryable).toBe(true);
+    expect(error503.retryable).toBe(true);
+  });
+
+  it("marks 429 rate limit as retryable", () => {
+    const error = new HeliosError("Rate limited", 429);
+    expect(error.retryable).toBe(true);
+  });
+
+  it("marks 4xx client errors as non-retryable", () => {
+    const error400 = new HeliosError("Bad request", 400);
+    const error401 = new HeliosError("Unauthorized", 401);
+    const error404 = new HeliosError("Not found", 404);
+    expect(error400.retryable).toBe(false);
+    expect(error401.retryable).toBe(false);
+    expect(error404.retryable).toBe(false);
+  });
+});
+
+describe("Retry behavior", () => {
+  const mockApiKey = "test-api-key";
+  const mockBaseUrl = "https://test.example.com";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("retries on 500 server error and succeeds", async () => {
+    let callCount = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount < 3) {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          json: () =>
+            Promise.resolve({ error: { message: "Server error" } }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            id: "task_123",
+            status: "completed",
+          }),
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new HeliosClient({
+      apiKey: mockApiKey,
+      baseUrl: mockBaseUrl,
+      retry: {
+        maxRetries: 3,
+        initialDelayMs: 10,
+        maxDelayMs: 50,
+      },
+    });
+
+    const result = await client.getTask("task_123");
+    expect(result.id).toBe("task_123");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries on 429 rate limit", async () => {
+    let callCount = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve({
+          ok: false,
+          status: 429,
+          json: () =>
+            Promise.resolve({
+              error: { message: "Rate limited", code: "RATE_LIMIT_EXCEEDED" },
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ id: "task_123", status: "completed" }),
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new HeliosClient({
+      apiKey: mockApiKey,
+      baseUrl: mockBaseUrl,
+      retry: { maxRetries: 2, initialDelayMs: 10 },
+    });
+
+    const result = await client.getTask("task_123");
+    expect(result.id).toBe("task_123");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry on 400 client error", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: () =>
+        Promise.resolve({ error: { message: "Bad request" } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new HeliosClient({
+      apiKey: mockApiKey,
+      baseUrl: mockBaseUrl,
+      retry: { maxRetries: 3, initialDelayMs: 10 },
+    });
+
+    await expect(client.getTask("task_123")).rejects.toThrow("Bad request");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("exhausts retries and throws last error", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: () =>
+        Promise.resolve({ error: { message: "Service unavailable" } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new HeliosClient({
+      apiKey: mockApiKey,
+      baseUrl: mockBaseUrl,
+      retry: { maxRetries: 2, initialDelayMs: 10 },
+    });
+
+    await expect(client.getTask("task_123")).rejects.toThrow(
+      "Service unavailable",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
+  });
+
+  it("disables retry when retry is false", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () =>
+        Promise.resolve({ error: { message: "Server error" } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new HeliosClient({
+      apiKey: mockApiKey,
+      baseUrl: mockBaseUrl,
+      retry: false,
+    });
+
+    await expect(client.getTask("task_123")).rejects.toThrow("Server error");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("respects retryOnRateLimit: false", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: () =>
+        Promise.resolve({ error: { message: "Rate limited" } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new HeliosClient({
+      apiKey: mockApiKey,
+      baseUrl: mockBaseUrl,
+      retry: { maxRetries: 3, initialDelayMs: 10, retryOnRateLimit: false },
+    });
+
+    await expect(client.getTask("task_123")).rejects.toThrow("Rate limited");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("includes error code in HeliosError", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: () =>
+        Promise.resolve({
+          error: { message: "Task not found", code: "TASK_NOT_FOUND" },
+        }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new HeliosClient({
+      apiKey: mockApiKey,
+      baseUrl: mockBaseUrl,
+    });
+
+    try {
+      await client.getTask("task_123");
+    } catch (error) {
+      expect(error).toBeInstanceOf(HeliosError);
+      expect((error as HeliosError).code).toBe("TASK_NOT_FOUND");
+      expect((error as HeliosError).status).toBe(404);
+    }
+  });
 });
