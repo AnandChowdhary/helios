@@ -2,7 +2,7 @@
 
 ## Current State
 
-All Phase 1, Phase 2, and Phase 3 implementation is complete (except optional Dashboard UI).
+**All Phases Complete** (Phase 1, Phase 2, Phase 3) - only the optional Dashboard UI remains.
 
 **Deployed URLs:**
 
@@ -10,17 +10,6 @@ All Phase 1, Phase 2, and Phase 3 implementation is complete (except optional Da
 - **Staging**: https://helios-staging.getelysium.workers.dev
 
 **Test Suite:** 172 tests (all passing)
-
-## Recent Changes (This Iteration)
-
-- Implemented **Usage Tracking and Billing** (`GET /v1/usage`, `GET /v1/usage/current`)
-  - Daily usage metrics per API key stored in USAGE KV namespace
-  - Tracks: requests, tasks created/completed/failed/cancelled, token usage, task duration
-  - Usage summary with date range queries (max 90 days)
-  - Estimated cost calculation based on Claude API pricing ($3/1M input, $15/1M output)
-  - 22 new tests for usage tracking
-- Added USAGE KV namespace to wrangler.toml (placeholder ID - needs creation)
-- Updated all test files to include USAGE KV mock
 
 ## What's Done
 
@@ -41,15 +30,15 @@ All core features complete:
 - CI/CD pipelines
 - TypeScript SDK (sdk/typescript/)
 - Python SDK (sdk/python/)
-- **Usage tracking and billing** - NEW
+- Usage tracking and billing
 
-## Remaining Tasks
+## Remaining Task
 
-- Dashboard UI (optional)
+- Dashboard UI (optional) - The only unchecked item in SPEC.md
 
-## Before Deploying
+## Before Deploying Updates
 
-The USAGE KV namespace needs to be created:
+The USAGE KV namespace needs to be created if not already done:
 
 ```bash
 # Production
@@ -61,48 +50,8 @@ wrangler kv:namespace create USAGE --env staging
 # Update wrangler.toml env.staging section with the returned ID
 ```
 
-## Key New Files
-
-```
-src/services/usage.ts        # Usage tracking service
-src/routes/usage.ts          # Usage API endpoints
-test/unit/usage.test.ts      # Usage tests
-```
-
-## Usage API
-
-```bash
-# Get current month usage
-curl -H "Authorization: Bearer $API_KEY" \
-  https://helios.workers.dev/v1/usage/current
-
-# Get usage for date range (max 90 days)
-curl -H "Authorization: Bearer $API_KEY" \
-  "https://helios.workers.dev/v1/usage?start=2024-01-01&end=2024-01-31"
-```
-
-Response format:
-```json
-{
-  "apiKeyId": "key_xxx",
-  "period": { "start": "2024-01-01", "end": "2024-01-31" },
-  "totals": {
-    "requests": 100,
-    "tasksCreated": 50,
-    "tasksCompleted": 45,
-    "tasksFailed": 5,
-    "tasksCancelled": 0,
-    "inputTokens": 500000,
-    "outputTokens": 100000,
-    "totalDurationMs": 300000,
-    "estimatedCost": 3.00
-  },
-  "daily": [...]
-}
-```
-
 ## Notes
 
+- All SPEC.md checkboxes are now updated to reflect actual completion status
 - Usage data expires after 90 days in KV
-- Cost calculation uses Claude Sonnet 4.5 pricing
-- Usage is tracked at task creation (requests, tasksCreated) and completion (tokens, duration, status)
+- Cost calculation uses Claude Sonnet 4.5 pricing ($3/1M input, $15/1M output)
