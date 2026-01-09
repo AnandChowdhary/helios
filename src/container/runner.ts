@@ -181,3 +181,79 @@ export async function getContainerLogStream(
     return null;
   }
 }
+
+/**
+ * Result of a push operation.
+ */
+export interface PushResult {
+  success: boolean;
+  branch?: string;
+  pushed?: boolean;
+  message?: string;
+  error?: string;
+  pullRequest?: {
+    number: number;
+    url: string;
+    title: string;
+  };
+  pullRequestError?: string;
+}
+
+/**
+ * Pushes changes from a completed task to the remote repository.
+ *
+ * @param env - Worker environment with CLAUDE_RUNNER binding
+ * @param taskId - Unique task identifier
+ * @param config - Push configuration including branch, credentials, and PR options
+ * @returns Push result with branch info and optional PR details
+ */
+export async function pushContainerChanges(
+  env: Env,
+  taskId: string,
+  config: {
+    branch: string;
+    credentials: { type: "token"; value: string };
+    createPR?: boolean;
+    prTitle?: string;
+    prBody?: string;
+  },
+): Promise<PushResult> {
+  const containerId = env.CLAUDE_RUNNER.idFromName(taskId);
+  const container = env.CLAUDE_RUNNER.get(
+    containerId,
+  ) as DurableObjectStub<ClaudeRunner>;
+
+  try {
+    const response = await container.fetch(
+      new Request("http://container/push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          branch: config.branch,
+          credentials: config.credentials,
+          createPR: config.createPR ?? false,
+          prTitle: config.prTitle,
+          prBody: config.prBody,
+        }),
+      }),
+    );
+
+    if (!response.ok) {
+      const errorData = (await response.json()) as { error?: string };
+      return {
+        success: false,
+        error: errorData.error || `Push failed with status ${response.status}`,
+      };
+    }
+
+    return (await response.json()) as PushResult;
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Unknown error during push",
+    };
+  }
+}

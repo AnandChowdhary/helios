@@ -1,12 +1,18 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { CreateTaskSchema, type CreateTaskInput } from "../schemas/task";
+import {
+  CreateTaskSchema,
+  PushTaskSchema,
+  type CreateTaskInput,
+  type PushTaskInput,
+} from "../schemas/task";
 import { validateBody } from "../middleware/validate";
 import type { Env, Task, TaskQueueMessage } from "../types";
 import {
   startContainerTask,
   getContainerLogStream,
   stopContainerTask,
+  pushContainerChanges,
 } from "../container/runner";
 
 export const tasksRouter = new Hono<{ Bindings: Env }>();
@@ -286,5 +292,57 @@ tasksRouter.get("/:id/diff", async (c) => {
 
   return new Response(diff.body, {
     headers: { "Content-Type": "text/x-diff" },
+  });
+});
+
+tasksRouter.post("/:id/push", validateBody(PushTaskSchema), async (c) => {
+  const taskId = c.req.param("id");
+  const input = c.get("validatedBody") as PushTaskInput;
+
+  const task = await c.env.TASKS.get<Task>(taskId, "json");
+
+  if (!task) {
+    return c.json({ error: { message: "Task not found" } }, 404);
+  }
+
+  // Only allow push for completed tasks
+  if (task.status !== "completed") {
+    return c.json(
+      {
+        error: {
+          message: `Cannot push changes for task with status: ${task.status}. Task must be completed first.`,
+        },
+      },
+      400,
+    );
+  }
+
+  // Call the container to push changes
+  const result = await pushContainerChanges(c.env, taskId, {
+    branch: input.branch,
+    credentials: input.credentials,
+    createPR: input.createPR,
+    prTitle: input.prTitle,
+    prBody: input.prBody,
+  });
+
+  if (!result.success) {
+    return c.json(
+      {
+        taskId,
+        success: false,
+        error: result.error,
+      },
+      500,
+    );
+  }
+
+  return c.json({
+    taskId,
+    success: true,
+    branch: result.branch,
+    message: result.message,
+    pullRequest: result.pullRequest,
+    pullRequestError: result.pullRequestError,
   });
 });

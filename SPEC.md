@@ -464,11 +464,11 @@ Use `--dangerously-skip-permissions` only because:
 
 ### Phase 2: Async & Webhooks
 
-- [ ] Async task execution
-- [ ] Webhook notifications
-- [ ] Task cancellation
-- [ ] Logs and diff storage (R2/S3)
-- [ ] Push-to-remote endpoint
+- [x] Async task execution
+- [x] Webhook notifications
+- [x] Task cancellation
+- [x] Logs and diff storage (R2/S3)
+- [x] Push-to-remote endpoint
 
 ### Phase 3: Scale & Polish
 
