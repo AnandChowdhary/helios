@@ -53,7 +53,7 @@ interface CancelResponse {
 async function parseSSEStream(
   response: Response,
   terminateOn: string[] = ["complete", "error"],
-  timeoutMs: number = 90000 // 90 second default timeout for parsing
+  timeoutMs: number = 90000, // 90 second default timeout for parsing
 ): Promise<SSEEvent[]> {
   const events: SSEEvent[] = [];
   const reader = response.body!.getReader();
@@ -82,7 +82,7 @@ async function parseSSEStream(
         console.log(
           `[SSE] Stream ended naturally after ${
             Date.now() - startTime
-          }ms, ${chunkCount} chunks, ${events.length} events`
+          }ms, ${chunkCount} chunks, ${events.length} events`,
         );
         break;
       }
@@ -92,7 +92,7 @@ async function parseSSEStream(
       console.log(
         `[SSE] Chunk ${chunkCount} received (${chunk.length} bytes) at ${
           Date.now() - startTime
-        }ms`
+        }ms`,
       );
 
       buffer += chunk;
@@ -110,7 +110,7 @@ async function parseSSEStream(
             console.log(
               `[SSE] Parsed event: ${currentEvent || "message"} (total: ${
                 events.length
-              })`
+              })`,
             );
           } catch {
             events.push({
@@ -120,7 +120,7 @@ async function parseSSEStream(
             console.log(
               `[SSE] Parsed raw event: ${currentEvent || "message"} (total: ${
                 events.length
-              })`
+              })`,
             );
           }
 
@@ -129,7 +129,7 @@ async function parseSSEStream(
             console.log(
               `[SSE] Terminal event '${currentEvent}' received, stopping after ${
                 Date.now() - startTime
-              }ms`
+              }ms`,
             );
             reader.cancel();
             return events;
@@ -142,7 +142,7 @@ async function parseSSEStream(
     console.log(
       `[SSE] Error after ${Date.now() - startTime}ms: ${
         error instanceof Error ? error.message : error
-      }`
+      }`,
     );
     console.log(`[SSE] Events collected so far: ${events.length}`);
     console.log(`[SSE] Event types: ${events.map((e) => e.event).join(", ")}`);
@@ -153,7 +153,7 @@ async function parseSSEStream(
     ) {
       // Return what we have so far on timeout
       console.log(
-        `[SSE] Returning ${events.length} events collected before timeout`
+        `[SSE] Returning ${events.length} events collected before timeout`,
       );
       return events;
     }
@@ -169,7 +169,7 @@ async function parseSSEStream(
   console.log(
     `[SSE] Completed parsing: ${events.length} events in ${
       Date.now() - startTime
-    }ms`
+    }ms`,
   );
   return events;
 }
@@ -335,7 +335,7 @@ describe.skipIf(!shouldRunE2E)("E2E: Full Task Flow", () => {
       const task = (await taskRes.json()) as TaskResponse;
       expect(task.id).toBe(body.taskId);
       expect(["pending", "running", "completed", "failed"]).toContain(
-        task.status
+        task.status,
       );
     }, 30000);
 
@@ -413,7 +413,7 @@ describe.skipIf(!shouldRunE2E)("E2E: Full Task Flow", () => {
       console.log(
         `[TEST] Response received in ${Date.now() - startTime}ms - Status: ${
           res.status
-        }`
+        }`,
       );
       console.log(`[TEST] Content-Type: ${res.headers.get("content-type")}`);
 
@@ -424,7 +424,7 @@ describe.skipIf(!shouldRunE2E)("E2E: Full Task Flow", () => {
       console.log("[TEST] Starting SSE stream parsing...");
       const events = await parseSSEStream(res, ["complete", "error"], 100000);
       console.log(
-        `[TEST] SSE parsing complete. Total events: ${events.length}`
+        `[TEST] SSE parsing complete. Total events: ${events.length}`,
       );
 
       // Should have received some events
@@ -437,11 +437,11 @@ describe.skipIf(!shouldRunE2E)("E2E: Full Task Flow", () => {
 
       // Should end with complete or error event
       const terminalEvents = events.filter((e) =>
-        ["complete", "error"].includes(e.event)
+        ["complete", "error"].includes(e.event),
       );
       console.log(`[TEST] Terminal events: ${terminalEvents.length}`);
       console.log(
-        `[TEST] All event types: ${events.map((e) => e.event).join(", ")}`
+        `[TEST] All event types: ${events.map((e) => e.event).join(", ")}`,
       );
       expect(terminalEvents.length).toBeGreaterThan(0);
     }, 120000); // 2 minute timeout for full execution
@@ -515,7 +515,7 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
     console.log(
       `[TEST] Response received in ${Date.now() - startTime}ms - Status: ${
         res.status
-      }`
+      }`,
     );
     console.log(`[TEST] Content-Type: ${res.headers.get("content-type")}`);
 
@@ -527,7 +527,7 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
     const events = await parseSSEStream(res, ["complete", "error"], 150000);
     console.log(`[TEST] SSE parsing complete. Total events: ${events.length}`);
     console.log(
-      `[TEST] All event types: ${events.map((e) => e.event).join(", ")}`
+      `[TEST] All event types: ${events.map((e) => e.event).join(", ")}`,
     );
 
     // Should have tool_use events
@@ -574,7 +574,7 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
     console.log(
       `[TEST] Response received in ${Date.now() - startTime}ms - Status: ${
         res.status
-      }`
+      }`,
     );
     console.log(`[TEST] Content-Type: ${res.headers.get("content-type")}`);
 
@@ -585,7 +585,7 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
     const events = await parseSSEStream(res, ["complete", "error"], 100000);
     console.log(`[TEST] SSE parsing complete. Total events: ${events.length}`);
     console.log(
-      `[TEST] All event types: ${events.map((e) => e.event).join(", ")}`
+      `[TEST] All event types: ${events.map((e) => e.event).join(", ")}`,
     );
 
     // Should receive events (either complete or timeout)
@@ -598,7 +598,7 @@ describe("E2E: Local Validation", () => {
   it("has correct test configuration", () => {
     if (!shouldRunE2E) {
       console.log(
-        "E2E tests skipped: Missing STAGING_API_KEY or ANTHROPIC_API_KEY"
+        "E2E tests skipped: Missing STAGING_API_KEY or ANTHROPIC_API_KEY",
       );
       console.log("To run E2E tests, set:");
       console.log("  STAGING_URL (optional, defaults to staging)");

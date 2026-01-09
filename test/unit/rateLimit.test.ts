@@ -22,6 +22,7 @@ describe("rateLimitMiddleware", () => {
     keyHash: "test-hash",
     createdAt: new Date().toISOString(),
     rateLimit: 5,
+    concurrentTaskLimit: 5,
     enabled: true,
   };
 

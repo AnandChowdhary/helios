@@ -473,7 +473,7 @@ Use `--dangerously-skip-permissions` only because:
 ### Phase 3: Scale & Polish
 
 - [ ] WebSocket streaming
-- [ ] Concurrent task limits per account
+- [x] Concurrent task limits per account
 - [ ] Usage tracking and billing
 - [ ] Dashboard UI (optional)
 - [x] SDK clients (TypeScript)

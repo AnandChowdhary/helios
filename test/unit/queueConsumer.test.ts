@@ -16,6 +16,11 @@ vi.mock("../../src/container/runner", () => ({
   }),
 }));
 
+// Mock the concurrent task limit module
+vi.mock("../../src/middleware/concurrentTaskLimit", () => ({
+  decrementActiveTaskCount: vi.fn().mockResolvedValue(0),
+}));
+
 describe("Queue Consumer", () => {
   let mockTasksKV: Map<string, string>;
   let mockR2: Map<string, string>;
@@ -110,6 +115,7 @@ describe("Queue Consumer", () => {
 
   const sampleQueueMessage: TaskQueueMessage = {
     taskId: "task_123",
+    apiKeyId: "key_test",
     prompt: "Fix the bug",
     repository: {
       url: "https://github.com/user/repo",
