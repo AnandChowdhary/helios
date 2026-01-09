@@ -1,11 +1,12 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 // E2E tests run against a deployed staging environment
 // Set environment variables to enable:
 //   STAGING_URL - The base URL of the staging environment
 //   STAGING_API_KEY - A valid Helios API key for staging
 //   ANTHROPIC_API_KEY - Anthropic API key for Claude Code tasks
-const BASE_URL = process.env.STAGING_URL || "https://helios-staging.getelysium.workers.dev";
+const BASE_URL =
+  process.env.STAGING_URL || "https://helios-staging.getelysium.workers.dev";
 const API_KEY = process.env.STAGING_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
@@ -48,34 +49,51 @@ interface CancelResponse {
 }
 
 // Parse SSE stream into events
-async function parseSSEStream(response: Response): Promise<SSEEvent[]> {
+// Terminates early when a terminal event (complete/error) is received
+async function parseSSEStream(
+  response: Response,
+  terminateOn: string[] = ["complete", "error"]
+): Promise<SSEEvent[]> {
   const events: SSEEvent[] = [];
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let currentEvent = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-    for (const line of lines) {
-      if (line.startsWith("event: ")) {
-        currentEvent = line.slice(7).trim();
-      } else if (line.startsWith("data: ")) {
-        try {
-          const data = JSON.parse(line.slice(6));
-          events.push({ event: currentEvent || "message", data });
-        } catch {
-          events.push({ event: currentEvent || "message", data: line.slice(6) });
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            events.push({ event: currentEvent || "message", data });
+          } catch {
+            events.push({
+              event: currentEvent || "message",
+              data: line.slice(6),
+            });
+          }
+
+          // Stop reading on terminal events
+          if (terminateOn.includes(currentEvent)) {
+            reader.cancel();
+            return events;
+          }
+          currentEvent = "";
         }
-        currentEvent = "";
       }
     }
+  } finally {
+    reader.releaseLock();
   }
 
   return events;
@@ -290,52 +308,48 @@ describe.skipIf(!shouldRunE2E)("E2E: Full Task Flow", () => {
   });
 
   describe("Sync Task Flow with SSE", () => {
-    it(
-      "creates sync task and streams SSE events",
-      async () => {
-        const res = await fetch(`${BASE_URL}/v1/tasks`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${API_KEY}`,
-            "Content-Type": "application/json",
+    it("creates sync task and streams SSE events", async () => {
+      const res = await fetch(`${BASE_URL}/v1/tasks`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt:
+            "Just say 'Hello from Helios!' and nothing else. Do not use any tools.",
+          repository: {
+            url: "https://github.com/anthropics/anthropic-cookbook.git",
+            branch: "main",
           },
-          body: JSON.stringify({
-            prompt:
-              "Just say 'Hello from Helios!' and nothing else. Do not use any tools.",
-            repository: {
-              url: "https://github.com/anthropics/anthropic-cookbook.git",
-              branch: "main",
-            },
-            claude: {
-              apiKey: ANTHROPIC_API_KEY,
-              model: "claude-sonnet-4-5",
-              maxTurns: 1,
-            },
-            output: { mode: "sync" },
-          }),
-        });
+          claude: {
+            apiKey: ANTHROPIC_API_KEY,
+            model: "claude-sonnet-4-5",
+            maxTurns: 1,
+          },
+          output: { mode: "sync" },
+        }),
+      });
 
-        expect(res.status).toBe(200);
-        expect(res.headers.get("content-type")).toContain("text/event-stream");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/event-stream");
 
-        // Parse the SSE stream
-        const events = await parseSSEStream(res);
+      // Parse the SSE stream
+      const events = await parseSSEStream(res);
 
-        // Should have received some events
-        expect(events.length).toBeGreaterThan(0);
+      // Should have received some events
+      expect(events.length).toBeGreaterThan(0);
 
-        // Should have a status event indicating running
-        const statusEvents = events.filter((e) => e.event === "status");
-        expect(statusEvents.length).toBeGreaterThan(0);
+      // Should have a status event indicating running
+      const statusEvents = events.filter((e) => e.event === "status");
+      expect(statusEvents.length).toBeGreaterThan(0);
 
-        // Should end with complete or error event
-        const terminalEvents = events.filter((e) =>
-          ["complete", "error"].includes(e.event)
-        );
-        expect(terminalEvents.length).toBeGreaterThan(0);
-      },
-      120000
-    ); // 2 minute timeout for full execution
+      // Should end with complete or error event
+      const terminalEvents = events.filter((e) =>
+        ["complete", "error"].includes(e.event)
+      );
+      expect(terminalEvents.length).toBeGreaterThan(0);
+    }, 120000); // 2 minute timeout for full execution
   });
 
   describe("Task Status Retrieval", () => {
@@ -372,97 +386,91 @@ describe.skipIf(!shouldRunE2E)("E2E: Full Task Flow", () => {
 
 // Conditional E2E tests that require full infrastructure
 describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
-  it(
-    "executes Claude Code task with tool usage",
-    async () => {
-      const res = await fetch(`${BASE_URL}/v1/tasks`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${API_KEY}`,
-          "Content-Type": "application/json",
+  it("executes Claude Code task with tool usage", async () => {
+    const res = await fetch(`${BASE_URL}/v1/tasks`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt:
+          "Use the Read tool to read the README.md file and tell me the title of the project.",
+        repository: {
+          url: "https://github.com/anthropics/anthropic-cookbook.git",
+          branch: "main",
         },
-        body: JSON.stringify({
-          prompt:
-            "Use the Read tool to read the README.md file and tell me the title of the project.",
-          repository: {
-            url: "https://github.com/anthropics/anthropic-cookbook.git",
-            branch: "main",
-          },
-          claude: {
-            apiKey: ANTHROPIC_API_KEY,
-            model: "claude-sonnet-4-5",
-            maxTurns: 3,
-          },
-          options: {
-            timeout: 120,
-            allowedTools: ["Read", "Glob"],
-          },
-          output: { mode: "sync" },
-        }),
-      });
-
-      expect(res.status).toBe(200);
-      expect(res.headers.get("content-type")).toContain("text/event-stream");
-
-      const events = await parseSSEStream(res);
-
-      // Should have tool_use events
-      const toolEvents = events.filter((e) => e.event === "tool_use");
-      // Tool use is expected but not guaranteed based on Claude's response
-      console.log(`Tool use events: ${toolEvents.length}`);
-
-      // Should complete successfully or with error
-      const completeEvent = events.find((e) => e.event === "complete");
-      const errorEvent = events.find((e) => e.event === "error");
-      expect(completeEvent || errorEvent).toBeDefined();
-    },
-    180000
-  ); // 3 minute timeout
-
-  it(
-    "handles task timeout gracefully",
-    async () => {
-      const res = await fetch(`${BASE_URL}/v1/tasks`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${API_KEY}`,
-          "Content-Type": "application/json",
+        claude: {
+          apiKey: ANTHROPIC_API_KEY,
+          model: "claude-sonnet-4-5",
+          maxTurns: 3,
         },
-        body: JSON.stringify({
-          prompt:
-            "This is a very short task that should complete before timeout.",
-          repository: {
-            url: "https://github.com/anthropics/anthropic-cookbook.git",
-            branch: "main",
-          },
-          claude: {
-            apiKey: ANTHROPIC_API_KEY,
-            model: "claude-sonnet-4-5",
-            maxTurns: 1,
-          },
-          options: {
-            timeout: 60,
-          },
-          output: { mode: "sync" },
-        }),
-      });
+        options: {
+          timeout: 120,
+          allowedTools: ["Read", "Glob"],
+        },
+        output: { mode: "sync" },
+      }),
+    });
 
-      expect(res.status).toBe(200);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
 
-      const events = await parseSSEStream(res);
+    const events = await parseSSEStream(res);
 
-      // Should receive events (either complete or timeout)
-      expect(events.length).toBeGreaterThan(0);
-    },
-    120000
-  );
+    // Should have tool_use events
+    const toolEvents = events.filter((e) => e.event === "tool_use");
+    // Tool use is expected but not guaranteed based on Claude's response
+    console.log(`Tool use events: ${toolEvents.length}`);
+
+    // Should complete successfully or with error
+    const completeEvent = events.find((e) => e.event === "complete");
+    const errorEvent = events.find((e) => e.event === "error");
+    expect(completeEvent || errorEvent).toBeDefined();
+  }, 180000); // 3 minute timeout
+
+  it("handles task timeout gracefully", async () => {
+    const res = await fetch(`${BASE_URL}/v1/tasks`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt:
+          "This is a very short task that should complete before timeout.",
+        repository: {
+          url: "https://github.com/anthropics/anthropic-cookbook.git",
+          branch: "main",
+        },
+        claude: {
+          apiKey: ANTHROPIC_API_KEY,
+          model: "claude-sonnet-4-5",
+          maxTurns: 1,
+        },
+        options: {
+          timeout: 60,
+        },
+        output: { mode: "sync" },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+
+    const events = await parseSSEStream(res);
+
+    // Should receive events (either complete or timeout)
+    expect(events.length).toBeGreaterThan(0);
+  }, 120000);
 });
 
 // Test that runs without external dependencies
 describe("E2E: Local Validation", () => {
   it("has correct test configuration", () => {
     if (!shouldRunE2E) {
-      console.log("E2E tests skipped: Missing STAGING_API_KEY or ANTHROPIC_API_KEY");
+      console.log(
+        "E2E tests skipped: Missing STAGING_API_KEY or ANTHROPIC_API_KEY"
+      );
       console.log("To run E2E tests, set:");
       console.log("  STAGING_URL (optional, defaults to staging)");
       console.log("  STAGING_API_KEY (required)");
