@@ -3,6 +3,7 @@
 ## Current State
 
 All core implementation is complete. 102 tests passing (15 E2E tests skipped without staging env vars):
+
 - Unit tests: 58
 - Integration tests: 28
 - E2E tests: 16
@@ -30,7 +31,8 @@ CI workflow is now complete with lint, typecheck, test (with coverage), and buil
    - `CLOUDFLARE_ACCOUNT_ID` - Already in wrangler.toml (0f5ad4e52108866c892fca418834b9b8)
    - `STAGING_API_KEY` - API key for E2E tests (create via `npm run seed-keys`)
    - `ANTHROPIC_API_KEY` - For E2E tests to run Claude
-   - Optional: `CODECOV_TOKEN` for coverage reporting
+
+[NOTE FROM USER]: I have added all these secrets to the GitHub Actions secrets. You can use them now.
 
 2. **Run Full E2E Tests Against Production**
    Set env vars and run: `STAGING_URL=https://helios.getelysium.workers.dev npm run test:e2e`
