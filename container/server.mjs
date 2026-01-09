@@ -489,6 +489,22 @@ async function handleRequest(req, res) {
     return;
   }
 
+  // Raw logs endpoint (returns accumulated log file content)
+  if (url.pathname === "/logs/raw") {
+    if (!existsSync(LOG_FILE)) {
+      sendJson(res, { error: "Logs not yet available" }, 404);
+      return;
+    }
+    try {
+      const content = await readFile(LOG_FILE, "utf-8");
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end(content);
+    } catch (e) {
+      sendJson(res, { error: "Failed to read log file" }, 500);
+    }
+    return;
+  }
+
   // Push changes to remote
   if (url.pathname === "/push") {
     await handlePush(req, res);

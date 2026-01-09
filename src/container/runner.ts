@@ -183,6 +183,36 @@ export async function getContainerLogStream(
 }
 
 /**
+ * Fetches accumulated logs from a container (for async tasks).
+ * This returns the raw log file content, not a stream.
+ *
+ * @param env - Worker environment with CLAUDE_RUNNER binding
+ * @param taskId - Unique task identifier
+ * @returns Log content as string, or null if unavailable
+ */
+export async function getContainerLogs(
+  env: Env,
+  taskId: string,
+): Promise<string | null> {
+  const containerId = env.CLAUDE_RUNNER.idFromName(taskId);
+  const container = env.CLAUDE_RUNNER.get(
+    containerId,
+  ) as DurableObjectStub<ClaudeRunner>;
+
+  try {
+    const response = await container.fetch(
+      new Request("http://container/logs/raw"),
+    );
+    if (!response.ok) {
+      return null;
+    }
+    return await response.text();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Result of a push operation.
  */
 export interface PushResult {
