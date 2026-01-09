@@ -179,6 +179,10 @@ export interface AsyncTaskResponse {
   status: "pending";
   /** Creation timestamp */
   createdAt: string;
+  /** Estimated duration in seconds */
+  estimatedDuration: number;
+  /** WebSocket URL for real-time streaming */
+  streamUrl: string;
   /** URL to check status */
   statusUrl: string;
 }

@@ -441,6 +441,8 @@ class HeliosClient:
             task_id=data.get("taskId", ""),
             status="pending",
             created_at=data.get("createdAt", ""),
+            estimated_duration=data.get("estimatedDuration", 300),
+            stream_url=data.get("streamUrl", ""),
             status_url=data.get("statusUrl", ""),
         )
 
@@ -963,6 +965,8 @@ class AsyncHeliosClient:
             task_id=data.get("taskId", ""),
             status="pending",
             created_at=data.get("createdAt", ""),
+            estimated_duration=data.get("estimatedDuration", 300),
+            stream_url=data.get("streamUrl", ""),
             status_url=data.get("statusUrl", ""),
         )
 
