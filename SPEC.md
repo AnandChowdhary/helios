@@ -2269,3 +2269,22 @@ For CI/CD, add these to GitHub Secrets:
 - `ANTHROPIC_API_KEY` (for E2E tests)
 
 ONCE YOU ARE DONE, THINK OF WHATEVER YOU WANT TO WORK ON NEXT THAT MAKES SENSE AND UPDATE THE SPEC ACCORDINGLY.
+
+---
+
+## Progress Notes
+
+### 2026-01-09
+- Added comprehensive unit tests for `src/utils/errors.ts` achieving 100% coverage
+- Overall test coverage improved from 72.57% to 73.80%
+- All 263 tests passing (15 E2E tests conditionally skipped)
+- TypeScript SDK tests: 26 passing
+- Python SDK tests: 32 passing
+
+**Remaining Coverage Gaps (integration-level code):**
+- `src/container/runner.ts` (42.59%) - Container lifecycle management, requires Cloudflare Container infrastructure
+- `src/routes/stream.ts` (22.87%) - WebSocket streaming, requires WebSocket client testing
+- `src/services/taskIndex.ts` (75%) - Task listing/pagination
+- `src/utils/logs.ts` (84.02%) - Streaming log management
+
+These gaps are in integration code that requires actual Cloudflare infrastructure to test properly. The unit-testable portions have high coverage.
