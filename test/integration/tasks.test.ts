@@ -29,6 +29,8 @@ interface TaskCreatedBody {
   taskId: string;
   status: string;
   createdAt: string;
+  estimatedDuration: number;
+  streamUrl: string;
   statusUrl: string;
 }
 
@@ -226,6 +228,31 @@ describe("Tasks API Integration", () => {
       expect(body.status).toBe("pending");
       expect(body).toHaveProperty("createdAt");
       expect(body).toHaveProperty("statusUrl");
+      expect(body).toHaveProperty("estimatedDuration");
+      expect(body.estimatedDuration).toBe(300); // default timeout
+      expect(body).toHaveProperty("streamUrl");
+      expect(body.streamUrl).toContain("ws://");
+      expect(body.streamUrl).toContain("/v1/tasks/stream");
+    });
+
+    it("async response uses custom timeout as estimatedDuration", async () => {
+      const env = createMockEnv();
+      const asyncPayload = {
+        ...validPayload,
+        options: { timeout: 600 },
+        output: { mode: "async" },
+      };
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks", {
+          method: "POST",
+          body: JSON.stringify(asyncPayload),
+        }),
+        env,
+      );
+
+      expect(res.status).toBe(202);
+      const body = (await res.json()) as TaskCreatedBody;
+      expect(body.estimatedDuration).toBe(600);
     });
 
     it("creates sync task and returns 200 with SSE stream", async () => {
