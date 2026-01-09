@@ -23,10 +23,12 @@ vi.mock("../../src/middleware/concurrentTaskLimit", () => ({
 
 describe("Queue Consumer", () => {
   let mockTasksKV: Map<string, string>;
+  let mockUsageKV: Map<string, string>;
   let mockR2: Map<string, string>;
 
   beforeEach(() => {
     mockTasksKV = new Map();
+    mockUsageKV = new Map();
     mockR2 = new Map();
     vi.clearAllMocks();
   });
@@ -56,6 +58,19 @@ describe("Queue Consumer", () => {
       RATE_LIMITS: {
         get: vi.fn(),
         put: vi.fn(),
+        delete: vi.fn(),
+        list: vi.fn(),
+        getWithMetadata: vi.fn(),
+      } as unknown as KVNamespace,
+      USAGE: {
+        get: vi.fn(async (key: string, format?: string) => {
+          const value = mockUsageKV.get(key);
+          if (!value) return null;
+          return format === "json" ? JSON.parse(value) : value;
+        }),
+        put: vi.fn(async (key: string, value: string) => {
+          mockUsageKV.set(key, value);
+        }),
         delete: vi.fn(),
         list: vi.fn(),
         getWithMetadata: vi.fn(),

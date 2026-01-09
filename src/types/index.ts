@@ -3,6 +3,7 @@ export interface Env {
   TASKS: KVNamespace;
   API_KEYS: KVNamespace;
   RATE_LIMITS: KVNamespace;
+  USAGE: KVNamespace;
 
   // R2 Bucket for storing logs and artifacts
   ARTIFACTS: R2Bucket;
@@ -125,4 +126,44 @@ export type WebSocketClientCommand = "ping" | "cancel";
 export interface WebSocketClientMessage {
   command: WebSocketClientCommand;
   taskId?: string;
+}
+
+/**
+ * Daily usage metrics aggregated per API key
+ * Stored in USAGE KV with key: {apiKeyId}:{YYYY-MM-DD}
+ */
+export interface DailyUsage {
+  apiKeyId: string;
+  date: string; // YYYY-MM-DD format
+  requests: number; // Total API requests made
+  tasksCreated: number; // Number of tasks created
+  tasksCompleted: number; // Number of tasks completed successfully
+  tasksFailed: number; // Number of tasks that failed
+  tasksCancelled: number; // Number of tasks cancelled
+  inputTokens: number; // Total input tokens (Claude API)
+  outputTokens: number; // Total output tokens (Claude API)
+  totalDurationMs: number; // Total task duration in milliseconds
+}
+
+/**
+ * Usage summary for a given period (returned by GET /v1/usage)
+ */
+export interface UsageSummary {
+  apiKeyId: string;
+  period: {
+    start: string; // ISO date
+    end: string; // ISO date
+  };
+  totals: {
+    requests: number;
+    tasksCreated: number;
+    tasksCompleted: number;
+    tasksFailed: number;
+    tasksCancelled: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalDurationMs: number;
+    estimatedCost: number; // Calculated cost based on token usage
+  };
+  daily: DailyUsage[]; // Daily breakdown
 }

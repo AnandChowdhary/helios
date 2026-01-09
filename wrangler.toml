@@ -21,6 +21,11 @@ id = "57605e42b86f4f97936152071207d8a5"
 binding = "RATE_LIMITS"
 id = "0d19024897cd48d6bba3c88ddd01afae"
 
+[[kv_namespaces]]
+binding = "USAGE"
+id = "placeholder-usage-kv-id"
+# To create: wrangler kv:namespace create USAGE
+
 # R2 Buckets for storing logs and artifacts
 [[r2_buckets]]
 binding = "ARTIFACTS"
@@ -73,6 +78,11 @@ id = "57605e42b86f4f97936152071207d8a5"
 [[env.staging.kv_namespaces]]
 binding = "RATE_LIMITS"
 id = "0d19024897cd48d6bba3c88ddd01afae"
+
+[[env.staging.kv_namespaces]]
+binding = "USAGE"
+id = "placeholder-usage-kv-id"
+# To create: wrangler kv:namespace create USAGE --env staging
 
 # Staging R2 Bucket
 [[env.staging.r2_buckets]]

@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { tasksRouter } from "./routes/tasks";
 import { streamRouter } from "./routes/stream";
+import { usageRouter } from "./routes/usage";
 import { authMiddleware } from "./middleware/auth";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { errorHandler } from "./utils/errors";
@@ -44,6 +45,7 @@ app.route("/v1/tasks/stream", streamRouter);
 app.use("/v1/*", authMiddleware);
 app.use("/v1/*", rateLimitMiddleware);
 app.route("/v1/tasks", tasksRouter);
+app.route("/v1/usage", usageRouter);
 
 export default {
   fetch: app.fetch,
