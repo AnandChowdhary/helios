@@ -28,7 +28,7 @@ export const rateLimitMiddleware = createMiddleware<{ Bindings: Env }>(
     // Set remaining header based on current usage
     c.header(
       "X-RateLimit-Remaining",
-      Math.max(0, apiKey.rateLimit - count - 1).toString()
+      Math.max(0, apiKey.rateLimit - count - 1).toString(),
     );
 
     if (count >= apiKey.rateLimit) {
@@ -43,5 +43,5 @@ export const rateLimitMiddleware = createMiddleware<{ Bindings: Env }>(
     });
 
     await next();
-  }
+  },
 );

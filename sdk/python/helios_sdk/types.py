@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional
 
 
@@ -275,3 +275,39 @@ class PushTaskInput:
     """PR title (if create_pr is True)."""
     pr_body: Optional[str] = None
     """PR body (if create_pr is True)."""
+
+
+@dataclass
+class ListTasksOptions:
+    """Options for listing tasks."""
+
+    limit: int = 20
+    """Maximum number of tasks to return (1-100, defaults to 20)."""
+    offset: int = 0
+    """Number of tasks to skip (defaults to 0)."""
+    status: Optional[TaskStatus] = None
+    """Filter by task status."""
+
+
+@dataclass
+class TaskListPagination:
+    """Pagination information for task listing."""
+
+    total: int
+    """Total number of tasks matching the filter."""
+    limit: int
+    """Limit used in the query."""
+    offset: int
+    """Offset used in the query."""
+    has_more: bool
+    """Whether there are more tasks to fetch."""
+
+
+@dataclass
+class TaskListResponse:
+    """Response from listing tasks."""
+
+    tasks: List[Task]
+    """Array of tasks."""
+    pagination: TaskListPagination
+    """Pagination information."""

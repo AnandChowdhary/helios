@@ -10,6 +10,8 @@ import type {
   PushTaskResponse,
   SSEEvent,
   APIError,
+  ListTasksOptions,
+  TaskListResponse,
 } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://helios.getelysium.workers.dev";
@@ -50,9 +52,7 @@ export class HeliosClient {
   /**
    * Extract error message from a failed response
    */
-  private async extractErrorMessage(
-    response: Response,
-  ): Promise<string> {
+  private async extractErrorMessage(response: Response): Promise<string> {
     let errorMessage = `Request failed with status ${response.status}`;
     try {
       const errorData = (await response.json()) as APIError;
@@ -164,7 +164,9 @@ export class HeliosClient {
    * console.log(`Task created: ${response.taskId}`);
    * ```
    */
-  async createTaskAsync(input: CreateAsyncTaskInput): Promise<AsyncTaskResponse> {
+  async createTaskAsync(
+    input: CreateAsyncTaskInput,
+  ): Promise<AsyncTaskResponse> {
     const { webhook, ...rest } = input;
     const payload: CreateTaskInput = {
       ...rest,
@@ -264,6 +266,51 @@ export class HeliosClient {
    */
   async getTask(taskId: string): Promise<Task> {
     return this.request<Task>("GET", `/v1/tasks/${taskId}`);
+  }
+
+  /**
+   * List tasks for the authenticated API key
+   *
+   * Returns tasks in reverse chronological order (newest first).
+   *
+   * @param options - Listing options (pagination and filtering)
+   * @returns Task list with pagination info
+   *
+   * @example
+   * ```typescript
+   * // Get the first 10 tasks
+   * const result = await client.listTasks({ limit: 10 });
+   * console.log(`Found ${result.pagination.total} tasks`);
+   *
+   * // Filter by status
+   * const completed = await client.listTasks({ status: "completed" });
+   *
+   * // Paginate through all tasks
+   * let offset = 0;
+   * while (true) {
+   *   const page = await client.listTasks({ limit: 20, offset });
+   *   for (const task of page.tasks) {
+   *     console.log(task.id, task.status);
+   *   }
+   *   if (!page.pagination.hasMore) break;
+   *   offset += page.tasks.length;
+   * }
+   * ```
+   */
+  async listTasks(options: ListTasksOptions = {}): Promise<TaskListResponse> {
+    const params = new URLSearchParams();
+    if (options.limit !== undefined) {
+      params.set("limit", String(options.limit));
+    }
+    if (options.offset !== undefined) {
+      params.set("offset", String(options.offset));
+    }
+    if (options.status !== undefined) {
+      params.set("status", options.status);
+    }
+    const queryString = params.toString();
+    const path = queryString ? `/v1/tasks?${queryString}` : "/v1/tasks";
+    return this.request<TaskListResponse>("GET", path);
   }
 
   /**

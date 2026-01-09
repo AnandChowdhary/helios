@@ -49,7 +49,10 @@ describe("HeliosClient", () => {
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
       const result = await client.createTaskAsync({
         prompt: "Test prompt",
         repository: { url: "https://github.com/test/repo.git" },
@@ -80,7 +83,10 @@ describe("HeliosClient", () => {
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
 
       await expect(
         client.createTaskAsync({
@@ -108,7 +114,10 @@ describe("HeliosClient", () => {
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
       const result = await client.getTask("task_123");
 
       expect(fetchMock).toHaveBeenCalledWith(
@@ -131,8 +140,13 @@ describe("HeliosClient", () => {
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
-      await expect(client.getTask("nonexistent")).rejects.toThrow("Task not found");
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
+      await expect(client.getTask("nonexistent")).rejects.toThrow(
+        "Task not found",
+      );
     });
   });
 
@@ -150,7 +164,10 @@ describe("HeliosClient", () => {
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
       const result = await client.cancelTask("task_123");
 
       expect(fetchMock).toHaveBeenCalledWith(
@@ -173,7 +190,10 @@ describe("HeliosClient", () => {
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
       const result = await client.getTaskLogs("task_123");
 
       expect(fetchMock).toHaveBeenCalledWith(
@@ -198,7 +218,10 @@ describe("HeliosClient", () => {
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
       const result = await client.getTaskDiff("task_123");
 
       expect(fetchMock).toHaveBeenCalledWith(
@@ -228,7 +251,10 @@ describe("HeliosClient", () => {
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
       const result = await client.pushTaskChanges("task_123", {
         branch: "claude/fix",
         credentials: { type: "token", value: "ghp_test" },
@@ -251,12 +277,18 @@ describe("HeliosClient", () => {
           Promise.resolve({
             taskId: "task_123",
             success: true,
-            pullRequest: { url: "https://github.com/test/repo/pull/1", number: 1 },
+            pullRequest: {
+              url: "https://github.com/test/repo/pull/1",
+              number: 1,
+            },
           }),
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
       await client.pushTaskChanges("task_123", {
         branch: "claude/fix",
         credentials: { type: "token", value: "ghp_test" },
@@ -299,7 +331,10 @@ describe("HeliosClient", () => {
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
       const onPoll = vi.fn();
       const result = await client.waitForTask("task_123", {
         intervalMs: 10,
@@ -325,7 +360,10 @@ describe("HeliosClient", () => {
       });
       vi.stubGlobal("fetch", fetchMock);
 
-      const client = new HeliosClient({ apiKey: mockApiKey, baseUrl: mockBaseUrl });
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
 
       await expect(
         client.waitForTask("task_123", {

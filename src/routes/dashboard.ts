@@ -907,7 +907,7 @@ const dashboardHtml = () => html`
       </div>
 
       <script>
-        ${script()}
+        ${script()};
       </script>
     </body>
   </html>

@@ -10,6 +10,7 @@ from .types import (
     CreateStreamTaskInput,
     FileChange,
     HeliosConfig,
+    ListTasksOptions,
     OutputConfig,
     OutputMode,
     PullRequestInfo,
@@ -21,6 +22,8 @@ from .types import (
     SSEEvent,
     SSEEventType,
     Task,
+    TaskListPagination,
+    TaskListResponse,
     TaskOptions,
     TaskResult,
     TaskStatus,
@@ -55,6 +58,10 @@ __all__ = [
     "FileChange",
     "TokenUsage",
     "RepositoryInfo",
+    # Task listing
+    "ListTasksOptions",
+    "TaskListPagination",
+    "TaskListResponse",
     # Async responses
     "AsyncTaskResponse",
     "CancelTaskResponse",

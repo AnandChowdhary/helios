@@ -61,6 +61,16 @@ interface PushErrorBody {
   error: string;
 }
 
+interface TaskListBody {
+  tasks: TaskBody[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+}
+
 interface HealthBody {
   status: string;
   timestamp: string;
@@ -354,6 +364,233 @@ describe("Tasks API Integration", () => {
       const env = createMockEnv();
       const res = await app.fetch(
         new Request("http://localhost/v1/tasks/task_123"),
+        env,
+      );
+
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe("GET /v1/tasks (list tasks)", () => {
+    it("returns empty list when no tasks exist", async () => {
+      const env = createMockEnv();
+      const res = await app.fetch(createAuthenticatedRequest("/v1/tasks"), env);
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as TaskListBody;
+      expect(body.tasks).toEqual([]);
+      expect(body.pagination.total).toBe(0);
+      expect(body.pagination.hasMore).toBe(false);
+    });
+
+    it("returns tasks for the authenticated API key", async () => {
+      const env = createMockEnv();
+
+      // Create tasks and add them to the index
+      const task1: Task = {
+        id: "task_1",
+        status: "completed",
+        prompt: "Test prompt 1",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date(Date.now() - 2000).toISOString(),
+        apiKeyId: testApiKey.id,
+      };
+      const task2: Task = {
+        id: "task_2",
+        status: "pending",
+        prompt: "Test prompt 2",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date(Date.now() - 1000).toISOString(),
+        apiKeyId: testApiKey.id,
+      };
+      mockTasksKV.set("task_1", JSON.stringify(task1));
+      mockTasksKV.set("task_2", JSON.stringify(task2));
+
+      // Set up the task index (newest first)
+      const index = {
+        apiKeyId: testApiKey.id,
+        taskIds: ["task_2", "task_1"],
+        updatedAt: new Date().toISOString(),
+      };
+      mockTasksKV.set(`index:${testApiKey.id}`, JSON.stringify(index));
+
+      const res = await app.fetch(createAuthenticatedRequest("/v1/tasks"), env);
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as TaskListBody;
+      expect(body.tasks).toHaveLength(2);
+      expect(body.tasks[0].id).toBe("task_2"); // newest first
+      expect(body.tasks[1].id).toBe("task_1");
+      expect(body.pagination.total).toBe(2);
+      expect(body.pagination.hasMore).toBe(false);
+    });
+
+    it("supports pagination with limit and offset", async () => {
+      const env = createMockEnv();
+
+      // Create 5 tasks
+      const taskIds: string[] = [];
+      for (let i = 1; i <= 5; i++) {
+        const task: Task = {
+          id: `task_${i}`,
+          status: "completed",
+          prompt: `Test prompt ${i}`,
+          repository: { url: "https://github.com/user/repo", branch: "main" },
+          createdAt: new Date(Date.now() - i * 1000).toISOString(),
+          apiKeyId: testApiKey.id,
+        };
+        mockTasksKV.set(`task_${i}`, JSON.stringify(task));
+        taskIds.push(`task_${i}`);
+      }
+
+      // Set up the task index
+      const index = {
+        apiKeyId: testApiKey.id,
+        taskIds: taskIds,
+        updatedAt: new Date().toISOString(),
+      };
+      mockTasksKV.set(`index:${testApiKey.id}`, JSON.stringify(index));
+
+      // Test limit
+      const res1 = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks?limit=2"),
+        env,
+      );
+      expect(res1.status).toBe(200);
+      const body1 = (await res1.json()) as TaskListBody;
+      expect(body1.tasks).toHaveLength(2);
+      expect(body1.pagination.limit).toBe(2);
+      expect(body1.pagination.hasMore).toBe(true);
+
+      // Test offset
+      const res2 = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks?limit=2&offset=2"),
+        env,
+      );
+      expect(res2.status).toBe(200);
+      const body2 = (await res2.json()) as TaskListBody;
+      expect(body2.tasks).toHaveLength(2);
+      expect(body2.tasks[0].id).toBe("task_3");
+      expect(body2.pagination.offset).toBe(2);
+      expect(body2.pagination.hasMore).toBe(true);
+
+      // Test last page
+      const res3 = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks?limit=2&offset=4"),
+        env,
+      );
+      expect(res3.status).toBe(200);
+      const body3 = (await res3.json()) as TaskListBody;
+      expect(body3.tasks).toHaveLength(1);
+      expect(body3.pagination.hasMore).toBe(false);
+    });
+
+    it("supports filtering by status", async () => {
+      const env = createMockEnv();
+
+      // Create tasks with different statuses
+      const task1: Task = {
+        id: "task_1",
+        status: "completed",
+        prompt: "Test prompt 1",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+        apiKeyId: testApiKey.id,
+      };
+      const task2: Task = {
+        id: "task_2",
+        status: "pending",
+        prompt: "Test prompt 2",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+        apiKeyId: testApiKey.id,
+      };
+      const task3: Task = {
+        id: "task_3",
+        status: "completed",
+        prompt: "Test prompt 3",
+        repository: { url: "https://github.com/user/repo", branch: "main" },
+        createdAt: new Date().toISOString(),
+        apiKeyId: testApiKey.id,
+      };
+      mockTasksKV.set("task_1", JSON.stringify(task1));
+      mockTasksKV.set("task_2", JSON.stringify(task2));
+      mockTasksKV.set("task_3", JSON.stringify(task3));
+
+      const index = {
+        apiKeyId: testApiKey.id,
+        taskIds: ["task_3", "task_2", "task_1"],
+        updatedAt: new Date().toISOString(),
+      };
+      mockTasksKV.set(`index:${testApiKey.id}`, JSON.stringify(index));
+
+      // Filter by completed status
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks?status=completed"),
+        env,
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as TaskListBody;
+      expect(body.tasks).toHaveLength(2);
+      expect(body.tasks.every((t) => t.status === "completed")).toBe(true);
+      expect(body.pagination.total).toBe(2);
+    });
+
+    it("returns 400 for invalid status filter", async () => {
+      const env = createMockEnv();
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks?status=invalid"),
+        env,
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as ErrorBody;
+      expect(body.error.message).toContain("Invalid status filter");
+    });
+
+    it("returns 400 for invalid limit", async () => {
+      const env = createMockEnv();
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks?limit=0"),
+        env,
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as ErrorBody;
+      expect(body.error.message).toContain(
+        "limit must be a number between 1 and 100",
+      );
+    });
+
+    it("returns 400 for limit exceeding maximum", async () => {
+      const env = createMockEnv();
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks?limit=101"),
+        env,
+      );
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 for negative offset", async () => {
+      const env = createMockEnv();
+      const res = await app.fetch(
+        createAuthenticatedRequest("/v1/tasks?offset=-1"),
+        env,
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as ErrorBody;
+      expect(body.error.message).toContain(
+        "offset must be a non-negative number",
+      );
+    });
+
+    it("requires authentication", async () => {
+      const env = createMockEnv();
+      const res = await app.fetch(
+        new Request("http://localhost/v1/tasks"),
         env,
       );
 

@@ -20,6 +20,10 @@ export type {
   TaskResult,
   FileChange,
   TokenUsage,
+  // Task listing
+  ListTasksOptions,
+  TaskListPagination,
+  TaskListResponse,
   // Async responses
   AsyncTaskResponse,
   CancelTaskResponse,
