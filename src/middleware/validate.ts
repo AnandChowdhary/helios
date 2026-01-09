@@ -1,13 +1,13 @@
 import { createMiddleware } from "hono/factory";
-import { HTTPException } from "hono/http-exception";
 import type { z } from "zod";
+import { createError, ErrorCodes } from "../utils/errors";
 
 export function validateBody<T extends z.ZodType>(schema: T) {
   return createMiddleware(async (c, next) => {
     const body = await c.req.json().catch(() => null);
 
     if (!body) {
-      throw new HTTPException(400, { message: "Invalid JSON body" });
+      throw createError(ErrorCodes.VALIDATION_INVALID_JSON);
     }
 
     const result = schema.safeParse(body);
@@ -18,10 +18,7 @@ export function validateBody<T extends z.ZodType>(schema: T) {
         message: issue.message,
       }));
 
-      throw new HTTPException(400, {
-        message: "Validation failed",
-        cause: { errors },
-      });
+      throw createError(ErrorCodes.VALIDATION_FAILED, undefined, errors);
     }
 
     c.set("validatedBody", result.data);

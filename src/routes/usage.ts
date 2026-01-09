@@ -6,6 +6,7 @@ import {
   getDateKey,
   getFirstOfMonth,
 } from "../services/usage";
+import { errorResponse, ErrorCodes } from "../utils/errors";
 
 export const usageRouter = new Hono<{ Bindings: Env }>();
 
@@ -35,21 +36,33 @@ usageRouter.get("/", async (c) => {
 
   if (!isValidDateFormat(startDate)) {
     return c.json(
-      { error: { message: "Invalid start date format. Use YYYY-MM-DD." } },
+      errorResponse(
+        ErrorCodes.VALIDATION_INVALID_PARAM,
+        "Invalid start date format. Use YYYY-MM-DD.",
+        { parameter: "start", value: startParam },
+      ),
       400,
     );
   }
 
   if (!isValidDateFormat(endDate)) {
     return c.json(
-      { error: { message: "Invalid end date format. Use YYYY-MM-DD." } },
+      errorResponse(
+        ErrorCodes.VALIDATION_INVALID_PARAM,
+        "Invalid end date format. Use YYYY-MM-DD.",
+        { parameter: "end", value: endParam },
+      ),
       400,
     );
   }
 
   if (new Date(startDate) > new Date(endDate)) {
     return c.json(
-      { error: { message: "Start date cannot be after end date." } },
+      errorResponse(
+        ErrorCodes.VALIDATION_INVALID_PARAM,
+        "Start date cannot be after end date.",
+        { start: startDate, end: endDate },
+      ),
       400,
     );
   }
@@ -59,7 +72,11 @@ usageRouter.get("/", async (c) => {
   );
   if (daysDiff > MAX_DATE_RANGE_DAYS) {
     return c.json(
-      { error: { message: "Date range cannot exceed 90 days." } },
+      errorResponse(
+        ErrorCodes.VALIDATION_INVALID_PARAM,
+        "Date range cannot exceed 90 days.",
+        { daysDiff, maxDays: MAX_DATE_RANGE_DAYS },
+      ),
       400,
     );
   }

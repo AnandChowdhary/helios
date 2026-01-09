@@ -481,6 +481,84 @@ const TaskSchema = z.object({
 - Concurrent task limits
 - Cost-based throttling (based on token usage)
 
+### Error Codes
+
+All error responses follow a consistent structure with a `code` field for programmatic error handling:
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error message",
+    "details": { ... }
+  }
+}
+```
+
+#### Authentication Errors (401)
+
+| Code | Description |
+|------|-------------|
+| `AUTH_MISSING_KEY` | No API key provided in Authorization header |
+| `AUTH_INVALID_KEY` | API key does not exist |
+| `AUTH_DISABLED_KEY` | API key has been disabled |
+
+#### Validation Errors (400)
+
+| Code | Description |
+|------|-------------|
+| `VALIDATION_FAILED` | Request body validation failed |
+| `VALIDATION_INVALID_JSON` | Invalid JSON in request body |
+| `VALIDATION_INVALID_PARAM` | Invalid query parameter |
+
+#### Rate Limiting Errors (429)
+
+| Code | Description |
+|------|-------------|
+| `RATE_LIMIT_EXCEEDED` | Too many requests per minute |
+| `CONCURRENT_LIMIT_EXCEEDED` | Too many concurrent tasks |
+
+#### Task Errors (400/404/408/500)
+
+| Code | Status | Description |
+|------|--------|-------------|
+| `TASK_NOT_FOUND` | 404 | Task ID not found |
+| `TASK_NOT_CANCELLABLE` | 400 | Task cannot be cancelled (wrong status) |
+| `TASK_TIMEOUT` | 408 | Task exceeded time limit |
+| `TASK_EXECUTION_FAILED` | 500 | Task failed during execution |
+| `TASK_CLONE_FAILED` | 400 | Failed to clone repository |
+
+#### Artifact Errors (404)
+
+| Code | Description |
+|------|-------------|
+| `LOGS_NOT_FOUND` | Task logs not available |
+| `DIFF_NOT_FOUND` | Task diff not available |
+
+#### Push Errors (400/500)
+
+| Code | Status | Description |
+|------|--------|-------------|
+| `PUSH_NOT_COMPLETED` | 400 | Task not completed, cannot push |
+| `PUSH_NO_CREDENTIALS` | 400 | No git credentials provided |
+| `PUSH_FAILED` | 500 | Failed to push to remote |
+
+#### Stream Errors (400/426/409)
+
+| Code | Status | Description |
+|------|--------|-------------|
+| `STREAM_UPGRADE_REQUIRED` | 426 | WebSocket upgrade required |
+| `STREAM_INVALID_JSON` | 400 | Invalid JSON in WebSocket message |
+| `STREAM_VALIDATION_FAILED` | 400 | WebSocket message validation failed |
+| `STREAM_TASK_RUNNING` | 409 | Task already running on connection |
+| `STREAM_ERROR` | 500 | Stream error during execution |
+
+#### Internal Errors (500)
+
+| Code | Description |
+|------|-------------|
+| `INTERNAL_ERROR` | Unexpected server error |
+
 ### Sandboxing
 
 Use `--dangerously-skip-permissions` only because:

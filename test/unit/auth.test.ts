@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { authMiddleware, hashApiKey } from "../../src/middleware/auth";
-import { errorHandler } from "../../src/utils/errors";
+import { errorHandler, ErrorCodes } from "../../src/utils/errors";
 import type { Env, ApiKey } from "../../src/types";
 
 interface ErrorBody {
-  error: { message: string };
+  error: { code: string; message: string };
 }
 
 interface SuccessBody {
@@ -86,7 +86,7 @@ describe("authMiddleware", () => {
 
     expect(res.status).toBe(401);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Missing API key");
+    expect(body.error.code).toBe(ErrorCodes.AUTH_MISSING_KEY);
   });
 
   it("rejects requests with non-Bearer auth", async () => {
@@ -100,7 +100,7 @@ describe("authMiddleware", () => {
 
     expect(res.status).toBe(401);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Missing API key");
+    expect(body.error.code).toBe(ErrorCodes.AUTH_MISSING_KEY);
   });
 
   it("rejects invalid API keys", async () => {
@@ -114,7 +114,7 @@ describe("authMiddleware", () => {
 
     expect(res.status).toBe(401);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Invalid API key");
+    expect(body.error.code).toBe(ErrorCodes.AUTH_INVALID_KEY);
   });
 
   it("rejects disabled API keys", async () => {
@@ -132,7 +132,7 @@ describe("authMiddleware", () => {
 
     expect(res.status).toBe(401);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Invalid API key");
+    expect(body.error.code).toBe(ErrorCodes.AUTH_DISABLED_KEY);
   });
 
   it("accepts valid API keys", async () => {

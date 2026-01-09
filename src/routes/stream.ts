@@ -18,6 +18,7 @@ import type {
   WebSocketClientMessage,
   WebSocketStreamMessage,
 } from "../types";
+import { errorResponse, ErrorCodes } from "../utils/errors";
 
 export const streamRouter = new Hono<{ Bindings: Env }>();
 
@@ -245,7 +246,7 @@ async function processTask(
       // Container didn't return a stream
       server.send(
         createMessage("error", taskId, {
-          code: "STREAM_ERROR",
+          code: ErrorCodes.STREAM_ERROR,
           message: "Failed to connect to container log stream",
         }),
       );
@@ -271,7 +272,7 @@ async function processTask(
 
     server.send(
       createMessage("error", taskId, {
-        code: "TASK_ERROR",
+        code: ErrorCodes.TASK_EXECUTION_FAILED,
         message: errorMessage,
       }),
     );
@@ -322,12 +323,10 @@ streamRouter.get("/", async (c) => {
   const upgradeHeader = request.headers.get("Upgrade");
   if (upgradeHeader?.toLowerCase() !== "websocket") {
     return c.json(
-      {
-        error: {
-          message:
-            "Expected WebSocket upgrade request. Include Upgrade: websocket header.",
-        },
-      },
+      errorResponse(
+        ErrorCodes.STREAM_UPGRADE_REQUIRED,
+        "Expected WebSocket upgrade request. Include Upgrade: websocket header.",
+      ),
       426,
     );
   }
@@ -336,12 +335,10 @@ streamRouter.get("/", async (c) => {
   const apiKey = await validateApiKey(env, request);
   if (!apiKey) {
     return c.json(
-      {
-        error: {
-          message:
-            "Invalid or missing API key. Provide via Authorization header, api_key query parameter, or Sec-WebSocket-Protocol: api-key, <your-key>",
-        },
-      },
+      errorResponse(
+        ErrorCodes.AUTH_INVALID_KEY,
+        "Invalid or missing API key. Provide via Authorization header, api_key query parameter, or Sec-WebSocket-Protocol: api-key, <your-key>",
+      ),
       401,
     );
   }
@@ -380,7 +377,7 @@ streamRouter.get("/", async (c) => {
     } catch {
       server.send(
         createMessage("error", currentTaskId || "", {
-          code: "INVALID_JSON",
+          code: ErrorCodes.STREAM_INVALID_JSON,
           message: "Invalid JSON message",
         }),
       );
@@ -419,7 +416,7 @@ streamRouter.get("/", async (c) => {
         } catch {
           server.send(
             createMessage("error", currentTaskId || "", {
-              code: "CANCEL_FAILED",
+              code: ErrorCodes.TASK_NOT_CANCELLABLE,
               message: "Failed to cancel task",
             }),
           );
@@ -434,7 +431,7 @@ streamRouter.get("/", async (c) => {
     if (taskStarted) {
       server.send(
         createMessage("error", currentTaskId || "", {
-          code: "TASK_ALREADY_RUNNING",
+          code: ErrorCodes.STREAM_TASK_RUNNING,
           message:
             "A task is already running on this connection. Wait for it to complete or send a cancel command.",
         }),
@@ -447,7 +444,7 @@ streamRouter.get("/", async (c) => {
     if (!parseResult.success) {
       server.send(
         createMessage("error", "", {
-          code: "VALIDATION_ERROR",
+          code: ErrorCodes.STREAM_VALIDATION_FAILED,
           message: "Invalid task configuration",
           errors: parseResult.error.issues.map((issue) => ({
             path: issue.path.join("."),
@@ -465,7 +462,7 @@ streamRouter.get("/", async (c) => {
     if (!limitCheck.allowed) {
       server.send(
         createMessage("error", "", {
-          code: "CONCURRENT_LIMIT_EXCEEDED",
+          code: ErrorCodes.CONCURRENT_LIMIT_EXCEEDED,
           message: `Concurrent task limit exceeded. You have ${limitCheck.current} active tasks (limit: ${limitCheck.limit}).`,
           current: limitCheck.current,
           limit: limitCheck.limit,

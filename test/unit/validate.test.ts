@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { z } from "zod";
 import { validateBody } from "../../src/middleware/validate";
-import { errorHandler } from "../../src/utils/errors";
+import { errorHandler, ErrorCodes } from "../../src/utils/errors";
 
 interface ErrorBody {
-  error: { message: string };
+  error: { code: string; message: string };
 }
 
 interface SuccessBody {
@@ -75,7 +75,7 @@ describe("validateBody middleware", () => {
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Invalid JSON body");
+    expect(body.error.code).toBe(ErrorCodes.VALIDATION_INVALID_JSON);
   });
 
   it("rejects missing required fields", async () => {
@@ -89,7 +89,7 @@ describe("validateBody middleware", () => {
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Validation failed");
+    expect(body.error.code).toBe(ErrorCodes.VALIDATION_FAILED);
   });
 
   it("rejects invalid field types", async () => {
@@ -103,7 +103,7 @@ describe("validateBody middleware", () => {
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Validation failed");
+    expect(body.error.code).toBe(ErrorCodes.VALIDATION_FAILED);
   });
 
   it("rejects empty required string", async () => {
@@ -117,7 +117,7 @@ describe("validateBody middleware", () => {
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Validation failed");
+    expect(body.error.code).toBe(ErrorCodes.VALIDATION_FAILED);
   });
 
   it("rejects invalid email format", async () => {
@@ -131,7 +131,7 @@ describe("validateBody middleware", () => {
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Validation failed");
+    expect(body.error.code).toBe(ErrorCodes.VALIDATION_FAILED);
   });
 
   it("rejects negative numbers when min is 0", async () => {
@@ -145,7 +145,7 @@ describe("validateBody middleware", () => {
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as ErrorBody;
-    expect(body.error.message).toBe("Validation failed");
+    expect(body.error.code).toBe(ErrorCodes.VALIDATION_FAILED);
   });
 
   it("handles empty body", async () => {

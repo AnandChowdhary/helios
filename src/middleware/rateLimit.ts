@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
-import { HTTPException } from "hono/http-exception";
 import type { ApiKey, Env } from "../types";
+import { createError, ErrorCodes } from "../utils/errors";
 
 export const rateLimitMiddleware = createMiddleware<{ Bindings: Env }>(
   async (c, next) => {
@@ -32,9 +32,7 @@ export const rateLimitMiddleware = createMiddleware<{ Bindings: Env }>(
     );
 
     if (count >= apiKey.rateLimit) {
-      throw new HTTPException(429, {
-        message: "Rate limit exceeded",
-      });
+      throw createError(ErrorCodes.RATE_LIMIT_EXCEEDED);
     }
 
     // Increment counter (expire after 2 minutes)
