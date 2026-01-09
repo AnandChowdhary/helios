@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 //   STAGING_URL - The base URL of the staging environment
 //   STAGING_API_KEY - A valid Helios API key for staging
 //   ANTHROPIC_API_KEY - Anthropic API key for Claude Code tasks
-const BASE_URL = process.env.STAGING_URL || "https://helios-staging.workers.dev";
+const BASE_URL = process.env.STAGING_URL || "https://helios-staging.getelysium.workers.dev";
 const API_KEY = process.env.STAGING_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 

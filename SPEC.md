@@ -1620,7 +1620,7 @@ import { describe, it, expect } from "vitest";
 
 // E2E tests run against deployed staging environment
 const BASE_URL =
-  process.env.STAGING_URL || "https://helios-staging.workers.dev";
+  process.env.STAGING_URL || "https://helios-staging.getelysium.workers.dev";
 const API_KEY = process.env.STAGING_API_KEY;
 
 describe.skipIf(!API_KEY)("E2E: Full Task Flow", () => {
@@ -1792,7 +1792,7 @@ jobs:
       - name: E2E Tests
         run: npm run test:e2e
         env:
-          STAGING_URL: https://helios-staging.workers.dev
+          STAGING_URL: https://helios-staging.getelysium.workers.dev
           STAGING_API_KEY: ${{ secrets.STAGING_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
