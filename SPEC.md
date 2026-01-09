@@ -477,7 +477,7 @@ Use `--dangerously-skip-permissions` only because:
 - [ ] Usage tracking and billing
 - [ ] Dashboard UI (optional)
 - [x] SDK clients (TypeScript)
-- [ ] SDK clients (Python)
+- [x] SDK clients (Python)
 
 ---
 
