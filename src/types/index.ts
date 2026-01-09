@@ -91,3 +91,38 @@ export interface ApiKey {
   concurrentTaskLimit: number; // maximum concurrent running tasks (default: 5)
   enabled: boolean;
 }
+
+/**
+ * WebSocket stream message types sent from server to client
+ */
+export type WebSocketMessageType =
+  | "connected"
+  | "status"
+  | "message"
+  | "tool_use"
+  | "tool_result"
+  | "error"
+  | "complete";
+
+/**
+ * WebSocket message sent from server to client during task streaming
+ */
+export interface WebSocketStreamMessage {
+  type: WebSocketMessageType;
+  taskId: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+}
+
+/**
+ * WebSocket client command types
+ */
+export type WebSocketClientCommand = "ping" | "cancel";
+
+/**
+ * WebSocket message sent from client to server
+ */
+export interface WebSocketClientMessage {
+  command: WebSocketClientCommand;
+  taskId?: string;
+}
