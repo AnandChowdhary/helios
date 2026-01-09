@@ -185,11 +185,30 @@ async function storeArtifacts(
 }
 
 /**
- * Sends a webhook notification for task completion.
+ * Configuration for webhook retry behavior.
  */
+interface WebhookRetryConfig {
+  /** Maximum number of retry attempts (default: 3) */
+  maxRetries: number;
+  /** Initial delay in ms before first retry (default: 1000) */
+  initialDelayMs: number;
+  /** Multiplier for exponential backoff (default: 2) */
+  backoffMultiplier: number;
+  /** Maximum delay between retries in ms (default: 10000) */
+  maxDelayMs: number;
+}
+
+const DEFAULT_RETRY_CONFIG: WebhookRetryConfig = {
+  maxRetries: 3,
+  initialDelayMs: 1000,
+  backoffMultiplier: 2,
+  maxDelayMs: 10000,
+};
+
 async function sendWebhook(
   webhook: { url: string; secret: string },
   task: Task,
+  config: WebhookRetryConfig = DEFAULT_RETRY_CONFIG,
 ): Promise<void> {
   const payload = JSON.stringify({
     event: task.status === "completed" ? "task.completed" : "task.failed",
@@ -217,24 +236,75 @@ async function sendWebhook(
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
-  try {
-    const response = await fetch(webhook.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Helios-Signature": `sha256=${signatureHex}`,
-        "X-Helios-Event":
-          task.status === "completed" ? "task.completed" : "task.failed",
-      },
-      body: payload,
-    });
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Helios-Signature": `sha256=${signatureHex}`,
+    "X-Helios-Event":
+      task.status === "completed" ? "task.completed" : "task.failed",
+  };
 
-    if (!response.ok) {
-      console.warn(`Webhook delivery failed: ${response.status}`);
+  let lastError: Error | null = null;
+  let attempt = 0;
+
+  while (attempt <= config.maxRetries) {
+    try {
+      const response = await fetch(webhook.url, {
+        method: "POST",
+        headers,
+        body: payload,
+      });
+
+      if (response.ok) {
+        if (attempt > 0) {
+          console.log(
+            `Webhook delivered successfully to ${webhook.url} after ${attempt} ${attempt === 1 ? "retry" : "retries"}`,
+          );
+        }
+        return;
+      }
+
+      const shouldRetry = isRetryableStatusCode(response.status);
+
+      if (!shouldRetry) {
+        console.warn(
+          `Webhook delivery failed with status ${response.status} (non-retryable): ${webhook.url}`,
+        );
+        return;
+      }
+
+      lastError = new Error(`HTTP ${response.status}`);
+      console.warn(
+        `Webhook delivery attempt ${attempt + 1} failed with status ${response.status}: ${webhook.url}`,
+      );
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(
+        `Webhook delivery attempt ${attempt + 1} failed with error: ${lastError.message}`,
+      );
     }
-  } catch (error) {
-    console.warn("Webhook delivery error:", error);
+
+    attempt++;
+
+    if (attempt <= config.maxRetries) {
+      const delay = Math.min(
+        config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt - 1),
+        config.maxDelayMs,
+      );
+      await sleep(delay);
+    }
   }
+
+  console.error(
+    `Webhook delivery failed after ${config.maxRetries + 1} attempts to ${webhook.url}: ${lastError?.message}`,
+  );
+}
+
+function isRetryableStatusCode(status: number): boolean {
+  return status === 429 || (status >= 500 && status < 600);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

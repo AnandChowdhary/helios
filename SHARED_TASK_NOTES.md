@@ -2,9 +2,9 @@
 
 ## Current State
 
-**All SPEC.md phases complete + structured error codes added.** All Phase 1, Phase 2, and Phase 3 items are checked off.
+**All SPEC.md phases complete + additional enhancements.** All Phase 1, Phase 2, and Phase 3 items are checked off.
 
-**Verified on 2026-01-09:** All 190 tests pass, TypeScript type checking passes, ESLint passes.
+**Verified on 2026-01-09:** All 200 tests pass, TypeScript type checking passes, ESLint passes.
 
 **Deployed URLs:**
 
@@ -12,25 +12,24 @@
 - **Staging**: https://helios-staging.getelysium.workers.dev
 - **Dashboard**: https://helios.getelysium.workers.dev/dashboard
 
-**Test Suite:** 190 tests (all passing)
+**Test Suite:** 200 tests (all passing)
 
 ## Recent Changes (2026-01-09)
 
-Added **structured error codes** for programmatic error handling:
+Added **webhook retry mechanism** with exponential backoff:
 
-- All errors now return a `code` field (e.g., `AUTH_MISSING_KEY`, `TASK_NOT_FOUND`)
-- Error codes defined in `src/utils/error-codes.ts`
-- Helper functions `createError()` and `errorResponse()` in `src/utils/errors.ts`
-- All middleware and route handlers updated to use error codes
-- SPEC.md updated with error codes documentation table
-- Tests updated to verify error codes instead of error messages
+- Webhooks now retry up to 3 times (4 total attempts) on failure
+- Exponential backoff: 1s, 2s, 4s delays between retries
+- Retries on: network errors, HTTP 429 (rate limit), HTTP 5xx (server errors)
+- Does not retry: HTTP 4xx client errors (except 429)
+- Implementation in `src/queue/consumer.ts` (sendWebhook function)
+- 10 new tests added in `test/unit/webhookRetry.test.ts`
+- SPEC.md updated with retry behavior documentation
 
 ## Potential Future Enhancements
 
-From the codebase exploration, here are high-priority improvements:
-
 1. ~~**Structured error codes**: Replace generic errors with domain-specific codes~~ (Done!)
-2. **Webhook retry mechanism**: Add exponential backoff for failed webhooks
+2. ~~**Webhook retry mechanism**: Add exponential backoff for failed webhooks~~ (Done!)
 3. **SDK retry logic**: Automatic exponential backoff for transient failures
 4. **Real-time log streaming**: Stream logs to R2 during execution, not just after
 5. **Rate limit info endpoint**: Let clients query their current rate limit status
@@ -42,3 +41,4 @@ From the codebase exploration, here are high-priority improvements:
 - Usage data expires after 90 days in KV
 - Dashboard uses vanilla HTML/CSS/JS (no build step)
 - Error codes are exported from `src/utils/errors.ts` for SDK use
+- Webhook retry config is defined in `src/queue/consumer.ts` (WebhookRetryConfig interface)
