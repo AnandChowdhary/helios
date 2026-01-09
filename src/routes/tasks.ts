@@ -27,6 +27,7 @@ import {
 import { addTaskToIndex, listTasks } from "../services/taskIndex";
 import { errorResponse, ErrorCodes } from "../utils/errors";
 import { StreamingLogManager } from "../utils/logs";
+import { processSSEStream } from "../utils/sse";
 
 export const tasksRouter = new Hono<{ Bindings: Env }>();
 
@@ -230,29 +231,13 @@ tasksRouter.post(
         const logResponse = await getContainerLogStream(c.env, taskId);
 
         if (logResponse && logResponse.body) {
-          const reader = logResponse.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-          let currentEvent = "message";
+          await processSSEStream(logResponse.body, {
+            logManager,
+            skipHeartbeats: true,
+            onEvent: async (event, data) => {
+              await stream.writeSSE({ event, data });
 
-          // Helper function to process SSE lines
-          const processLine = async (line: string) => {
-            if (line.startsWith("event: ")) {
-              currentEvent = line.slice(7).trim();
-            } else if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-              await stream.writeSSE({
-                event: currentEvent,
-                data,
-              });
-
-              // Capture log entry (skip heartbeats) - streams incrementally to R2
-              if (currentEvent !== "heartbeat") {
-                await logManager.addLog(currentEvent, data);
-              }
-
-              // If we got a complete event, update task and stop streaming
-              if (currentEvent === "complete") {
+              if (event === "complete") {
                 try {
                   const result = JSON.parse(data);
                   task.status = result.success ? "completed" : "failed";
@@ -260,10 +245,8 @@ tasksRouter.post(
                   task.result = result;
                   await c.env.TASKS.put(taskId, JSON.stringify(task));
 
-                  // Track task completion with usage data
                   await trackTaskCompleted(c.env, apiKey.id, task);
 
-                  // Store artifacts (diff)
                   if (result.diff) {
                     await c.env.ARTIFACTS.put(
                       `${taskId}/diff.patch`,
@@ -271,37 +254,13 @@ tasksRouter.post(
                     );
                   }
 
-                  // Finalize logs - flushes remaining buffer and marks as complete
                   await logManager.finalize();
                 } catch {
                   // Ignore parse errors
                 }
               }
-            }
-          };
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-
-            // Parse SSE events from the container response
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              await processLine(line);
-            }
-          }
-
-          // Process any remaining content in buffer after stream ends
-          if (buffer.trim()) {
-            const remainingLines = buffer.split("\n");
-            for (const line of remainingLines) {
-              await processLine(line);
-            }
-          }
+            },
+          });
 
           // Finalize logs if not already done (stream ended without 'complete' event)
           await logManager.finalize();
