@@ -103,7 +103,8 @@ describe("Container", () => {
     it("supports timeout configuration", () => {
       const content = readFileSync(entrypointPath, "utf-8");
       expect(content).toContain("TIMEOUT");
-      expect(content).toContain('timeout "$timeout_secs"');
+      // The timeout command uses -k flag to forcefully kill after 10s if SIGTERM doesn't work
+      expect(content).toContain('timeout -k 10 "$timeout_secs"');
     });
 
     it("handles task status events", () => {
