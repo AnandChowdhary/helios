@@ -23,8 +23,7 @@ id = "0d19024897cd48d6bba3c88ddd01afae"
 
 [[kv_namespaces]]
 binding = "USAGE"
-id = "placeholder-usage-kv-id"
-# To create: wrangler kv:namespace create USAGE
+id = "2382d735c12b46378e17edd8a239217a"
 
 # R2 Buckets for storing logs and artifacts
 [[r2_buckets]]
@@ -81,8 +80,7 @@ id = "0d19024897cd48d6bba3c88ddd01afae"
 
 [[env.staging.kv_namespaces]]
 binding = "USAGE"
-id = "placeholder-usage-kv-id"
-# To create: wrangler kv:namespace create USAGE --env staging
+id = "2382d735c12b46378e17edd8a239217a"
 
 # Staging R2 Bucket
 [[env.staging.r2_buckets]]
