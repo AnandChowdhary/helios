@@ -165,6 +165,10 @@ class AsyncTaskResponse:
     """Initial status."""
     created_at: str
     """Creation timestamp."""
+    estimated_duration: int
+    """Estimated duration in seconds."""
+    stream_url: str
+    """WebSocket URL for real-time streaming."""
     status_url: str
     """URL to check status."""
 
