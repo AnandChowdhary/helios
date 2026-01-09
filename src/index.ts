@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { tasksRouter } from "./routes/tasks";
 import { streamRouter } from "./routes/stream";
 import { usageRouter } from "./routes/usage";
+import { dashboardRouter } from "./routes/dashboard";
 import { authMiddleware } from "./middleware/auth";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { errorHandler } from "./utils/errors";
@@ -37,6 +38,9 @@ app.get("/", (c) => {
     docs: "https://github.com/AnandChowdhary/helios",
   });
 });
+
+// Dashboard UI - public route (authentication handled client-side)
+app.route("/dashboard", dashboardRouter);
 
 // WebSocket stream route is registered before auth middleware since it handles its own authentication
 // (WebSocket clients often cannot set Authorization headers)
