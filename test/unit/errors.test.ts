@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import {
@@ -152,6 +152,10 @@ describe("Error Utilities", () => {
       consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     });
 
+    afterEach(() => {
+      consoleErrorSpy.mockRestore();
+    });
+
     it("handles HTTPException with structured error code", async () => {
       app.get("/test", () => {
         throw createError(ErrorCodes.AUTH_MISSING_KEY);
@@ -235,7 +239,6 @@ describe("Error Utilities", () => {
 
     it("handles legacy HTTPException with unknown status code", async () => {
       app.get("/test", () => {
-        // Using 418 I'm a teapot which is not mapped in inferErrorCodeFromStatus
         throw new HTTPException(418 as 500, { message: "I'm a teapot" });
       });
 
@@ -287,7 +290,6 @@ describe("Error Utilities", () => {
       app.get("/test", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const obj: any = null;
-        // This will throw a TypeError
         return obj.nonExistent();
       });
 

@@ -142,7 +142,10 @@ describe("SSE Utilities", () => {
 
       // Should only log the 'message' event, not 'heartbeat'
       expect(mockLogManager.addLog).toHaveBeenCalledTimes(1);
-      expect(mockLogManager.addLog).toHaveBeenCalledWith("message", "actual data");
+      expect(mockLogManager.addLog).toHaveBeenCalledWith(
+        "message",
+        "actual data",
+      );
     });
 
     it("logs all events when skipHeartbeats is false", async () => {
@@ -162,7 +165,10 @@ describe("SSE Utilities", () => {
 
       expect(mockLogManager.addLog).toHaveBeenCalledTimes(2);
       expect(mockLogManager.addLog).toHaveBeenCalledWith("heartbeat", "ping");
-      expect(mockLogManager.addLog).toHaveBeenCalledWith("message", "actual data");
+      expect(mockLogManager.addLog).toHaveBeenCalledWith(
+        "message",
+        "actual data",
+      );
     });
 
     it("processes remaining buffer after stream ends", async () => {
