@@ -347,6 +347,7 @@ async function streamLogs(res) {
 
   // Track if we've seen a terminal status
   let statusCompletedCount = 0;
+  let lastHeartbeat = Date.now();
 
   // Also poll for the result file to know when to end the stream
   const pollInterval = setInterval(async () => {
@@ -358,6 +359,19 @@ async function streamLogs(res) {
 
     // Send any new log content
     await sendNewContent();
+
+    // Send heartbeat every 15 seconds to keep connection alive
+    const now = Date.now();
+    if (now - lastHeartbeat >= 15000) {
+      lastHeartbeat = now;
+      res.write(`event: heartbeat\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          timestamp: new Date().toISOString(),
+          message: "Connection alive",
+        })}\n\n`
+      );
+    }
 
     // Check if result is ready
     if (existsSync(RESULT_FILE)) {

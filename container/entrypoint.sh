@@ -13,8 +13,9 @@ STATUS_FILE="/tmp/status.json"
 RESULT_FILE="/tmp/result.json"
 LOG_FILE="/tmp/task.log"
 
-# Initialize status file
+# Initialize status and log files early so the server can watch them immediately
 echo '{"status":"starting","message":"Task runner initializing"}' > "$STATUS_FILE"
+touch "$LOG_FILE"
 
 # Start HTTP server in background for Cloudflare Containers communication
 echo "Starting HTTP server..."
@@ -157,6 +158,12 @@ run_claude() {
 
   update_status "running" "Starting Claude Code (model: $model, max_turns: $max_turns)"
 
+  # Verify claude command is available
+  if ! command -v claude &> /dev/null; then
+    log_error "CLAUDE_NOT_FOUND" "Claude CLI not found. Please ensure @anthropic-ai/claude-code is installed."
+    return 1
+  fi
+
   # Build Claude command arguments
   local claude_args=(
     "--dangerously-skip-permissions"
@@ -171,10 +178,16 @@ run_claude() {
     claude_args+=("--system-prompt" "$SYSTEM_PROMPT")
   fi
 
+  # Log the command being executed (without API key)
+  log_event "log" "{\"message\":\"Executing: claude ${claude_args[*]}\"}"
+
   # Run Claude Code with timeout, streaming output
   # Embed exit code in output stream to capture it reliably
   local exit_code=0
   local captured_exit=""
+  local line_count=0
+  local start_time
+  start_time=$(date +%s)
   
   while IFS= read -r line || [[ -n "$line" ]]; do
     # Check for our exit code marker
@@ -182,6 +195,8 @@ run_claude() {
       captured_exit="${line#__CLAUDE_EXIT_CODE__}"
       continue
     fi
+    
+    line_count=$((line_count + 1))
     
     # Forward Claude's output
     if echo "$line" | jq -e . >/dev/null 2>&1; then
@@ -197,14 +212,33 @@ run_claude() {
     fi
   done < <(timeout "$timeout_secs" claude "${claude_args[@]}" 2>&1; echo "__CLAUDE_EXIT_CODE__$?")
   
+  local end_time
+  end_time=$(date +%s)
+  local duration=$((end_time - start_time))
+  
   # Use the captured exit code
   if [[ -n "$captured_exit" ]]; then
     exit_code="$captured_exit"
   fi
 
+  # Log execution summary
+  log_event "log" "{\"message\":\"Claude execution completed: exit_code=$exit_code, lines=$line_count, duration=${duration}s\"}"
+
   if [[ $exit_code -eq 124 ]]; then
     log_error "TIMEOUT" "Task exceeded time limit of ${timeout_secs}s"
     return 124
+  fi
+
+  # Check if Claude produced any output
+  if [[ $line_count -eq 0 && $exit_code -ne 0 ]]; then
+    log_error "NO_OUTPUT" "Claude CLI exited with code $exit_code without producing any output"
+  fi
+
+  # Check for common exit codes
+  if [[ $exit_code -eq 127 ]]; then
+    log_error "COMMAND_NOT_FOUND" "Claude command not found or failed to execute"
+  elif [[ $exit_code -ne 0 ]]; then
+    log_error "CLAUDE_ERROR" "Claude CLI exited with code: $exit_code"
   fi
 
   return "$exit_code"

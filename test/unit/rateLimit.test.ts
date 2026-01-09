@@ -192,7 +192,10 @@ describe("rateLimitMiddleware", () => {
     const body = (await res.json()) as SuccessBody;
     expect(body.success).toBe(true);
 
-    // Should not have rate limit headers since rate limiting was skipped
-    expect(res.headers.has("X-RateLimit-Limit")).toBe(false);
+    // Should still have rate limit headers (for API consistency), but with full limit remaining
+    expect(res.headers.has("X-RateLimit-Limit")).toBe(true);
+    expect(res.headers.get("X-RateLimit-Limit")).toBe("5");
+    expect(res.headers.get("X-RateLimit-Remaining")).toBe("5"); // Full limit, not decremented
+    expect(res.headers.has("X-RateLimit-Reset")).toBe(true);
   });
 });
