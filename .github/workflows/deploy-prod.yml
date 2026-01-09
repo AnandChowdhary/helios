@@ -47,4 +47,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** Production" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${{ github.event.release.tag_name || github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**URL:** https://helios.workers.dev" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** https://helios.getelysium.workers.dev" >> $GITHUB_STEP_SUMMARY

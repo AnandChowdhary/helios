@@ -44,6 +44,6 @@ jobs:
       - name: Run E2E Tests
         run: npm run test:e2e
         env:
-          STAGING_URL: https://helios-staging.workers.dev
+          STAGING_URL: https://helios-staging.getelysium.workers.dev
           STAGING_API_KEY: ${{ secrets.STAGING_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
