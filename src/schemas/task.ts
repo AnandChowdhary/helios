@@ -60,3 +60,19 @@ export const CreateTaskSchema = z.object({
 });
 
 export type CreateTaskInput = z.infer<typeof CreateTaskSchema>;
+
+export const PushTaskSchema = z.object({
+  branch: z
+    .string()
+    .max(100)
+    .regex(/^[a-zA-Z0-9_\-/.]+$/, "Invalid branch name"),
+  credentials: z.object({
+    type: z.literal("token"),
+    value: z.string().min(1),
+  }),
+  createPR: z.boolean().default(false),
+  prTitle: z.string().max(500).optional(),
+  prBody: z.string().max(65536).optional(),
+});
+
+export type PushTaskInput = z.infer<typeof PushTaskSchema>;

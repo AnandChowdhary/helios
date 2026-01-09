@@ -7,18 +7,22 @@
  * - GET /result - Returns task execution result (from /tmp/result.json)
  * - GET /status - Returns current task status (from /tmp/status.json)
  * - GET /logs - Server-Sent Events stream of task logs (from /tmp/task.log)
+ * - POST /push - Push changes to remote repository
  *
  * This server runs on port 8080 (Cloudflare Containers default port).
  */
 
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync, watch } from "node:fs";
+import { exec } from "node:child_process";
 
 const PORT = process.env.PORT || 8080;
 const RESULT_FILE = "/tmp/result.json";
 const STATUS_FILE = "/tmp/status.json";
 const LOG_FILE = "/tmp/task.log";
+const REPO_DIR = "/workspace/repo";
+const PUSH_RESULT_FILE = "/tmp/push_result.json";
 
 /**
  * Read JSON file safely, returning null if not found or invalid.
@@ -44,6 +48,236 @@ function sendJson(res, data, statusCode = 200) {
 }
 
 /**
+ * Read request body as JSON.
+ */
+async function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk.toString();
+    });
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(body));
+      } catch (e) {
+        reject(new Error("Invalid JSON body"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+/**
+ * Execute a shell command and return output.
+ */
+function execCommand(command, options = {}) {
+  return new Promise((resolve, reject) => {
+    exec(
+      command,
+      { ...options, maxBuffer: 10 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(stderr || error.message));
+        } else {
+          resolve(stdout.trim());
+        }
+      },
+    );
+  });
+}
+
+/**
+ * Handle push request - pushes changes to remote repository.
+ * Expects POST body with:
+ * - branch: target branch name
+ * - credentials: { type: "token", value: "..." }
+ * - createPR: boolean
+ * - prTitle: string (optional)
+ * - prBody: string (optional)
+ */
+async function handlePush(req, res) {
+  // Only accept POST
+  if (req.method !== "POST") {
+    sendJson(res, { error: "Method not allowed" }, 405);
+    return;
+  }
+
+  // Check if repo directory exists
+  if (!existsSync(REPO_DIR)) {
+    sendJson(
+      res,
+      { error: "Repository not found. Task may not have completed." },
+      400,
+    );
+    return;
+  }
+
+  // Parse request body
+  let body;
+  try {
+    body = await readRequestBody(req);
+  } catch (e) {
+    sendJson(res, { error: "Invalid request body" }, 400);
+    return;
+  }
+
+  const { branch, credentials, createPR, prTitle, prBody } = body;
+
+  // Validate required fields
+  if (!branch || typeof branch !== "string") {
+    sendJson(res, { error: "Missing or invalid 'branch' field" }, 400);
+    return;
+  }
+
+  if (!credentials?.value) {
+    sendJson(res, { error: "Missing git credentials" }, 400);
+    return;
+  }
+
+  const gitToken = credentials.value;
+  const repoUrl = process.env.REPO_URL;
+
+  if (!repoUrl) {
+    sendJson(res, { error: "Repository URL not configured" }, 500);
+    return;
+  }
+
+  try {
+    // Change to repo directory
+    process.chdir(REPO_DIR);
+
+    // Check if there are changes to push
+    const status = await execCommand("git status --porcelain");
+    const hasUncommittedChanges = status.length > 0;
+
+    // Stage and commit any uncommitted changes
+    if (hasUncommittedChanges) {
+      await execCommand("git add -A");
+      await execCommand('git commit -m "Helios task changes"');
+    }
+
+    // Get current branch
+    const currentBranch = await execCommand("git branch --show-current");
+
+    // Rename branch if different from target
+    if (currentBranch !== branch) {
+      await execCommand(`git branch -m "${branch}"`);
+    }
+
+    // Configure remote with token
+    const remoteUrlWithToken = repoUrl.replace(
+      "https://",
+      `https://${gitToken}@`,
+    );
+    await execCommand(`git remote set-url origin "${remoteUrlWithToken}"`);
+
+    // Push to remote
+    await execCommand(`git push -u origin "${branch}" --force 2>&1`);
+
+    const result = {
+      success: true,
+      branch,
+      pushed: true,
+      message: `Successfully pushed to branch: ${branch}`,
+    };
+
+    // Create PR if requested (GitHub only for now)
+    if (createPR && repoUrl.includes("github.com")) {
+      try {
+        const prResult = await createGitHubPR({
+          repoUrl,
+          token: gitToken,
+          branch,
+          title: prTitle || `Helios: ${branch}`,
+          body: prBody || "Changes made by Helios Claude Code task.",
+        });
+        result.pullRequest = prResult;
+      } catch (prError) {
+        result.pullRequestError = prError.message;
+      }
+    }
+
+    // Store result
+    await writeFile(PUSH_RESULT_FILE, JSON.stringify(result));
+    sendJson(res, result);
+  } catch (error) {
+    const errorResult = {
+      success: false,
+      error: error.message,
+    };
+    await writeFile(PUSH_RESULT_FILE, JSON.stringify(errorResult));
+    sendJson(res, errorResult, 500);
+  }
+}
+
+/**
+ * Create a GitHub pull request using the GitHub API.
+ */
+async function createGitHubPR({ repoUrl, token, branch, title, body }) {
+  // Extract owner and repo from URL
+  // Format: https://github.com/owner/repo.git or https://github.com/owner/repo
+  const match = repoUrl.match(/github\.com\/([^/]+)\/([^/.]+)/);
+  if (!match) {
+    throw new Error("Could not parse GitHub repository URL");
+  }
+
+  const [, owner, repo] = match;
+
+  // Get the default branch
+  const repoInfoResponse = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+        "User-Agent": "Helios-Bot",
+      },
+    },
+  );
+
+  if (!repoInfoResponse.ok) {
+    throw new Error(
+      `Failed to get repository info: ${repoInfoResponse.status}`,
+    );
+  }
+
+  const repoInfo = await repoInfoResponse.json();
+  const baseBranch = repoInfo.default_branch;
+
+  // Create the pull request
+  const prResponse = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/pulls`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+        "User-Agent": "Helios-Bot",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title,
+        body,
+        head: branch,
+        base: baseBranch,
+      }),
+    },
+  );
+
+  if (!prResponse.ok) {
+    const errorText = await prResponse.text();
+    throw new Error(`Failed to create PR: ${prResponse.status} - ${errorText}`);
+  }
+
+  const pr = await prResponse.json();
+  return {
+    number: pr.number,
+    url: pr.html_url,
+    title: pr.title,
+  };
+}
+
+/**
  * Stream logs via Server-Sent Events.
  * Reads existing log content and then watches for new lines.
  */
@@ -51,7 +285,7 @@ async function streamLogs(res) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
+    Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
 
@@ -191,6 +425,12 @@ async function handleRequest(req, res) {
   // SSE logs streaming endpoint
   if (url.pathname === "/logs") {
     await streamLogs(res);
+    return;
+  }
+
+  // Push changes to remote
+  if (url.pathname === "/push") {
+    await handlePush(req, res);
     return;
   }
 

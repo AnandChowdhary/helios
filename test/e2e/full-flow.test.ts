@@ -48,34 +48,48 @@ interface CancelResponse {
 }
 
 // Parse SSE stream into events
-async function parseSSEStream(response: Response): Promise<SSEEvent[]> {
+// Terminates early when a terminal event (complete/error) is received
+async function parseSSEStream(
+  response: Response,
+  terminateOn: string[] = ["complete", "error"]
+): Promise<SSEEvent[]> {
   const events: SSEEvent[] = [];
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let currentEvent = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-    for (const line of lines) {
-      if (line.startsWith("event: ")) {
-        currentEvent = line.slice(7).trim();
-      } else if (line.startsWith("data: ")) {
-        try {
-          const data = JSON.parse(line.slice(6));
-          events.push({ event: currentEvent || "message", data });
-        } catch {
-          events.push({ event: currentEvent || "message", data: line.slice(6) });
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            events.push({ event: currentEvent || "message", data });
+          } catch {
+            events.push({ event: currentEvent || "message", data: line.slice(6) });
+          }
+
+          // Stop reading on terminal events
+          if (terminateOn.includes(currentEvent)) {
+            reader.cancel();
+            return events;
+          }
+          currentEvent = "";
         }
-        currentEvent = "";
       }
     }
+  } finally {
+    reader.releaseLock();
   }
 
   return events;
