@@ -2,7 +2,7 @@ import { createMiddleware } from "hono/factory";
 import type { Env, ApiKey } from "../types";
 import { createError, ErrorCodes } from "../utils/errors";
 
-const DEFAULT_CONCURRENT_TASK_LIMIT = 5;
+export const DEFAULT_CONCURRENT_TASK_LIMIT = 5;
 
 /**
  * Gets the current count of active (pending or running) tasks for an API key.
