@@ -25,6 +25,10 @@ export type {
   ListTasksOptions,
   TaskListPagination,
   TaskListResponse,
+  // Rate limits
+  RateLimitInfo,
+  ConcurrentTasksInfo,
+  RateLimitResponse,
   // Async responses
   AsyncTaskResponse,
   CancelTaskResponse,

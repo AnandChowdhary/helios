@@ -201,6 +201,47 @@ class TestCancelTask:
         assert response.status == "cancelled"
 
 
+class TestGetRateLimit:
+    """Tests for get_rate_limit method."""
+
+    @respx.mock
+    def test_gets_rate_limit(self):
+        """Should get rate limit status."""
+        respx.get(f"{BASE_URL}/v1/rate-limit").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "rateLimit": {
+                        "limit": 100,
+                        "current": 5,
+                        "remaining": 95,
+                        "resetAt": "2025-01-08T10:01:00Z",
+                        "resetAtUnix": 1704707660000,
+                        "windowMs": 60000,
+                    },
+                    "concurrentTasks": {
+                        "limit": 5,
+                        "active": 2,
+                        "remaining": 3,
+                    },
+                },
+            )
+        )
+
+        client = HeliosClient(HeliosConfig(api_key="test-key", base_url=BASE_URL))
+        response = client.get_rate_limit()
+
+        assert response.rate_limit.limit == 100
+        assert response.rate_limit.current == 5
+        assert response.rate_limit.remaining == 95
+        assert response.rate_limit.reset_at == "2025-01-08T10:01:00Z"
+        assert response.rate_limit.reset_at_unix == 1704707660000
+        assert response.rate_limit.window_ms == 60000
+        assert response.concurrent_tasks.limit == 5
+        assert response.concurrent_tasks.active == 2
+        assert response.concurrent_tasks.remaining == 3
+
+
 class TestGetTaskLogs:
     """Tests for get_task_logs method."""
 

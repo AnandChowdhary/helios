@@ -329,3 +329,43 @@ class TaskListResponse:
     """Array of tasks."""
     pagination: TaskListPagination
     """Pagination information."""
+
+
+@dataclass
+class RateLimitInfo:
+    """Rate limit information."""
+
+    limit: int
+    """Maximum requests allowed per minute."""
+    current: int
+    """Number of requests made in current window."""
+    remaining: int
+    """Requests remaining in current window."""
+    reset_at: str
+    """ISO timestamp when limit resets."""
+    reset_at_unix: int
+    """Unix timestamp (ms) when limit resets."""
+    window_ms: int
+    """Window duration in milliseconds."""
+
+
+@dataclass
+class ConcurrentTasksInfo:
+    """Concurrent tasks information."""
+
+    limit: int
+    """Maximum concurrent tasks allowed."""
+    active: int
+    """Currently active tasks."""
+    remaining: int
+    """Available concurrent task slots."""
+
+
+@dataclass
+class RateLimitResponse:
+    """Response from the rate limit endpoint."""
+
+    rate_limit: RateLimitInfo
+    """Request rate limit information."""
+    concurrent_tasks: ConcurrentTasksInfo
+    """Concurrent task limit information."""

@@ -6,6 +6,7 @@ from .types import (
     CancelTaskResponse,
     ClaudeConfig,
     ClaudeModel,
+    ConcurrentTasksInfo,
     CreateAsyncTaskInput,
     CreateStreamTaskInput,
     FileChange,
@@ -16,6 +17,8 @@ from .types import (
     PullRequestInfo,
     PushTaskInput,
     PushTaskResponse,
+    RateLimitInfo,
+    RateLimitResponse,
     Repository,
     RepositoryCredentials,
     RepositoryInfo,
@@ -64,6 +67,10 @@ __all__ = [
     "ListTasksOptions",
     "TaskListPagination",
     "TaskListResponse",
+    # Rate limits
+    "RateLimitInfo",
+    "ConcurrentTasksInfo",
+    "RateLimitResponse",
     # Async responses
     "AsyncTaskResponse",
     "CancelTaskResponse",
