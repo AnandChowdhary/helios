@@ -13,6 +13,7 @@ import type {
   ListTasksOptions,
   TaskListResponse,
   RetryConfig,
+  RateLimitResponse,
 } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://helios.getelysium.workers.dev";
@@ -506,6 +507,31 @@ export class HeliosClient {
       "POST",
       `/v1/tasks/${taskId}/cancel`,
     );
+  }
+
+  /**
+   * Get current rate limit status
+   *
+   * Returns the current rate limit and concurrent task limit status
+   * for the authenticated API key.
+   *
+   * @returns Rate limit information
+   *
+   * @example
+   * ```typescript
+   * const limits = await client.getRateLimit();
+   * console.log(`Rate limit: ${limits.rateLimit.remaining}/${limits.rateLimit.limit} remaining`);
+   * console.log(`Concurrent tasks: ${limits.concurrentTasks.active}/${limits.concurrentTasks.limit} active`);
+   *
+   * // Check if rate limited before making requests
+   * if (limits.rateLimit.remaining === 0) {
+   *   const waitMs = limits.rateLimit.resetAtUnix - Date.now();
+   *   console.log(`Rate limited. Retry after ${waitMs}ms`);
+   * }
+   * ```
+   */
+  async getRateLimit(): Promise<RateLimitResponse> {
+    return this.request<RateLimitResponse>("GET", "/v1/rate-limit");
   }
 
   /**

@@ -365,3 +365,43 @@ export interface TaskListResponse {
   /** Pagination information */
   pagination: TaskListPagination;
 }
+
+/**
+ * Rate limit information
+ */
+export interface RateLimitInfo {
+  /** Maximum requests allowed per minute */
+  limit: number;
+  /** Number of requests made in current window */
+  current: number;
+  /** Requests remaining in current window */
+  remaining: number;
+  /** ISO timestamp when limit resets */
+  resetAt: string;
+  /** Unix timestamp (ms) when limit resets */
+  resetAtUnix: number;
+  /** Window duration in milliseconds */
+  windowMs: number;
+}
+
+/**
+ * Concurrent tasks information
+ */
+export interface ConcurrentTasksInfo {
+  /** Maximum concurrent tasks allowed */
+  limit: number;
+  /** Currently active tasks */
+  active: number;
+  /** Available concurrent task slots */
+  remaining: number;
+}
+
+/**
+ * Response from the rate limit endpoint
+ */
+export interface RateLimitResponse {
+  /** Request rate limit information */
+  rateLimit: RateLimitInfo;
+  /** Concurrent task limit information */
+  concurrentTasks: ConcurrentTasksInfo;
+}

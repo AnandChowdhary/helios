@@ -15,6 +15,7 @@ import httpx
 from .types import (
     AsyncTaskResponse,
     CancelTaskResponse,
+    ConcurrentTasksInfo,
     CreateAsyncTaskInput,
     CreateStreamTaskInput,
     FileChange,
@@ -23,6 +24,8 @@ from .types import (
     PullRequestInfo,
     PushTaskInput,
     PushTaskResponse,
+    RateLimitInfo,
+    RateLimitResponse,
     RepositoryInfo,
     RetryConfig,
     SSEEvent,
@@ -168,6 +171,32 @@ def _parse_task_list_response(data: dict) -> TaskListResponse:
         has_more=pagination_data.get("hasMore", False),
     )
     return TaskListResponse(tasks=tasks, pagination=pagination)
+
+
+def _parse_rate_limit_response(data: dict) -> RateLimitResponse:
+    """Parse rate limit response from API."""
+    rate_limit_data = data.get("rateLimit", {})
+    concurrent_tasks_data = data.get("concurrentTasks", {})
+
+    rate_limit = RateLimitInfo(
+        limit=rate_limit_data.get("limit", 0),
+        current=rate_limit_data.get("current", 0),
+        remaining=rate_limit_data.get("remaining", 0),
+        reset_at=rate_limit_data.get("resetAt", ""),
+        reset_at_unix=rate_limit_data.get("resetAtUnix", 0),
+        window_ms=rate_limit_data.get("windowMs", 60000),
+    )
+
+    concurrent_tasks = ConcurrentTasksInfo(
+        limit=concurrent_tasks_data.get("limit", 5),
+        active=concurrent_tasks_data.get("active", 0),
+        remaining=concurrent_tasks_data.get("remaining", 5),
+    )
+
+    return RateLimitResponse(
+        rate_limit=rate_limit,
+        concurrent_tasks=concurrent_tasks,
+    )
 
 
 def _parse_sse_lines(lines: List[str]) -> Iterator[SSEEvent]:
@@ -552,6 +581,29 @@ class HeliosClient:
             status="cancelled",
             cancelled_at=data.get("cancelledAt", ""),
         )
+
+    def get_rate_limit(self) -> RateLimitResponse:
+        """Get current rate limit status.
+
+        Returns the current rate limit and concurrent task limit status
+        for the authenticated API key.
+
+        Returns:
+            Rate limit information.
+
+        Example:
+            >>> limits = client.get_rate_limit()
+            >>> print(f"Rate limit: {limits.rate_limit.remaining}/{limits.rate_limit.limit} remaining")
+            >>> print(f"Concurrent tasks: {limits.concurrent_tasks.active}/{limits.concurrent_tasks.limit} active")
+            >>>
+            >>> # Check if rate limited before making requests
+            >>> if limits.rate_limit.remaining == 0:
+            ...     import time
+            ...     wait_ms = limits.rate_limit.reset_at_unix - int(time.time() * 1000)
+            ...     print(f"Rate limited. Retry after {wait_ms}ms")
+        """
+        data = self._request("GET", "/v1/rate-limit")
+        return _parse_rate_limit_response(data)
 
     def get_task_logs(self, task_id: str) -> str:
         """Get task logs.
@@ -1016,6 +1068,18 @@ class AsyncHeliosClient:
             status="cancelled",
             cancelled_at=data.get("cancelledAt", ""),
         )
+
+    async def get_rate_limit(self) -> RateLimitResponse:
+        """Get current rate limit status.
+
+        Returns the current rate limit and concurrent task limit status
+        for the authenticated API key.
+
+        Returns:
+            Rate limit information.
+        """
+        data = await self._request("GET", "/v1/rate-limit")
+        return _parse_rate_limit_response(data)
 
     async def get_task_logs(self, task_id: str) -> str:
         """Get task logs.

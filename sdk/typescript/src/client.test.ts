@@ -180,6 +180,52 @@ describe("HeliosClient", () => {
     });
   });
 
+  describe("getRateLimit", () => {
+    it("retrieves rate limit status", async () => {
+      const mockResponse = {
+        rateLimit: {
+          limit: 100,
+          current: 5,
+          remaining: 95,
+          resetAt: "2025-01-01T00:01:00Z",
+          resetAtUnix: 1704067260000,
+          windowMs: 60000,
+        },
+        concurrentTasks: {
+          limit: 5,
+          active: 2,
+          remaining: 3,
+        },
+      };
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const client = new HeliosClient({
+        apiKey: mockApiKey,
+        baseUrl: mockBaseUrl,
+      });
+      const result = await client.getRateLimit();
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${mockBaseUrl}/v1/rate-limit`,
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${mockApiKey}`,
+          }),
+        }),
+      );
+      expect(result.rateLimit.limit).toBe(100);
+      expect(result.rateLimit.remaining).toBe(95);
+      expect(result.concurrentTasks.active).toBe(2);
+      expect(result.concurrentTasks.limit).toBe(5);
+    });
+  });
+
   describe("getTaskLogs", () => {
     it("retrieves task logs as text", async () => {
       const mockLogs = "Log line 1\nLog line 2\n";
