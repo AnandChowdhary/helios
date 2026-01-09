@@ -7,7 +7,7 @@ import {
 } from "../container/runner";
 import { decrementActiveTaskCount } from "../middleware/concurrentTaskLimit";
 import { trackTaskCompleted } from "../services/usage";
-import { storeLogsToR2, formatLogEntry } from "../utils/logs";
+import { StreamingLogManager } from "../utils/logs";
 
 /**
  * Processes a queued task message by starting a container to execute Claude Code.
@@ -15,7 +15,7 @@ import { storeLogsToR2, formatLogEntry } from "../utils/logs";
  * Flow:
  * 1. Update task status to "running"
  * 2. Start container with task configuration
- * 3. Poll for container completion
+ * 3. Poll for container completion (with incremental log streaming to R2)
  * 4. Store results in R2 and update task status
  */
 async function processQueuedTask(
@@ -36,6 +36,12 @@ async function processQueuedTask(
     expirationTtl: 86400 * 7,
   });
 
+  // Use streaming log manager for incremental R2 uploads during execution
+  const logManager = new StreamingLogManager(env, taskId, {
+    flushIntervalMs: 5000, // Flush logs to R2 every 5 seconds
+    maxBufferSize: 50, // Or when buffer reaches 50 entries
+  });
+
   console.log(`Starting container for task ${taskId}`, {
     repository: message.repository.url,
     model: message.claude.model,
@@ -50,14 +56,16 @@ async function processQueuedTask(
       gitToken: message.gitToken,
     });
 
+    // Poll for completion with incremental log streaming
     const result = await pollForCompletion(
       env,
       taskId,
       message.options.timeout,
+      logManager,
     );
 
-    // Fetch accumulated logs from the container
-    const logs = await getContainerLogs(env, taskId);
+    // Finalize logs - flushes remaining buffer and marks as complete
+    await logManager.finalize();
 
     task.status = result.success ? "completed" : "failed";
     task.completedAt = new Date().toISOString();
@@ -67,7 +75,8 @@ async function processQueuedTask(
       expirationTtl: 86400 * 7,
     });
 
-    await storeArtifacts(env, taskId, result, logs);
+    // Store other artifacts (diff, result) - logs already stored via logManager
+    await storeArtifacts(env, taskId, result);
 
     // Track task completion with usage data
     await trackTaskCompleted(env, message.apiKeyId, task);
@@ -93,15 +102,9 @@ async function processQueuedTask(
       expirationTtl: 86400 * 7,
     });
 
-    // Try to fetch logs even on failure (best effort)
-    try {
-      const logs = await getContainerLogs(env, taskId);
-      const errorLog = formatLogEntry("error", task.error ?? "Unknown error");
-      const fullLogs = logs ? `${logs}\n${errorLog}` : errorLog;
-      await storeLogsToR2(env, taskId, fullLogs);
-    } catch {
-      // Ignore log storage errors
-    }
+    // Store error log and finalize
+    await logManager.addLog("error", task.error ?? "Unknown error");
+    await logManager.finalize();
 
     // Track failed task
     await trackTaskCompleted(env, message.apiKeyId, task);
@@ -121,19 +124,41 @@ async function processQueuedTask(
 /**
  * Polls the container for completion and returns the result.
  * Uses exponential backoff with a maximum wait time based on task timeout.
+ * Periodically streams logs to R2 for real-time access during execution.
  */
 async function pollForCompletion(
   env: Env,
   taskId: string,
   timeoutSeconds: number,
+  logManager: StreamingLogManager,
 ): Promise<TaskResult> {
   const startTime = Date.now();
   const maxWaitMs = timeoutSeconds * 1000;
   let pollInterval = 5000; // Start with 5 second intervals
   const maxPollInterval = 30000; // Max 30 second intervals
+  let lastLogLength = 0;
 
   while (Date.now() - startTime < maxWaitMs) {
     const state = await getContainerState(env, taskId);
+
+    // Fetch and stream new logs to R2 (best effort)
+    try {
+      const logs = await getContainerLogs(env, taskId);
+      if (logs && logs.length > lastLogLength) {
+        // Extract only new log content
+        const newLogs = logs.slice(lastLogLength);
+        if (newLogs.trim()) {
+          // Split by newlines and add each as a log entry
+          const logLines = newLogs.split("\n").filter((line) => line.trim());
+          for (const line of logLines) {
+            await logManager.addLog("container", line);
+          }
+        }
+        lastLogLength = logs.length;
+      }
+    } catch {
+      // Ignore log fetch errors during polling
+    }
 
     if (state.status === "stopped_with_code") {
       const result = await getContainerResult(env, taskId);
@@ -175,13 +200,13 @@ async function pollForCompletion(
 }
 
 /**
- * Stores task artifacts (logs, diff) in R2 storage.
+ * Stores task artifacts (diff, result) in R2 storage.
+ * Note: Logs are now handled separately by StreamingLogManager for incremental uploads.
  */
 async function storeArtifacts(
   env: Env,
   taskId: string,
   result: TaskResult,
-  logs?: string | null,
 ): Promise<void> {
   if (result.diff) {
     await env.ARTIFACTS.put(`${taskId}/diff.patch`, result.diff, {
@@ -198,11 +223,6 @@ async function storeArtifacts(
       createdAt: new Date().toISOString(),
     },
   });
-
-  // Store logs if available
-  if (logs) {
-    await storeLogsToR2(env, taskId, logs);
-  }
 }
 
 /**

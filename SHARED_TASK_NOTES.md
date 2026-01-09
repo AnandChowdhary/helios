@@ -4,7 +4,7 @@
 
 **All SPEC.md phases complete + additional enhancements.** All Phase 1, Phase 2, and Phase 3 items are checked off.
 
-**Verified on 2026-01-09:** All tests pass (213 main + 25 TS SDK + 31 Python SDK), TypeScript type checking passes, ESLint passes.
+**Verified on 2026-01-09:** All tests pass (228 main + 25 TS SDK + 31 Python SDK), TypeScript type checking passes, ESLint passes.
 
 **Deployed URLs:**
 
@@ -14,26 +14,28 @@
 
 ## Recent Changes (2026-01-09)
 
-Added **task log persistence to R2**:
+Added **real-time log streaming to R2**:
 
-- Logs are now stored to R2 at `{taskId}/logs.txt` for all execution paths
-- SSE sync mode: logs captured during streaming, stored on completion
-- WebSocket stream mode: logs captured during streaming, stored on completion
-- Async queue mode: logs fetched from container after task completes
-- Container server has new `/logs/raw` endpoint to fetch accumulated logs
-- `GET /v1/tasks/:id/logs` endpoint now returns actual logs (previously returned 404)
-- Logs include timestamps and event types: `[timestamp] [event] data`
-- Metadata includes taskId, createdAt, lineCount
-- 2 new tests for log storage verification
+- New `StreamingLogManager` class in `src/utils/logs.ts` handles incremental log uploads
+- Logs are flushed to R2 every 5 seconds during task execution (configurable)
+- Also flushes when buffer reaches 50 entries (configurable)
+- All execution modes updated: SSE sync, WebSocket stream, and async queue
+- Metadata now includes `status` field: "streaming" (during execution) or "complete" (after task ends)
+- Added `getLogMetadata()` function to check log status without downloading the full file
+- Logs are accessible via `GET /v1/tasks/:id/logs` even while task is running
+- 15 new tests for StreamingLogManager functionality
+- Fallback mechanism: if incremental writes fail, all in-memory logs are written at finalization
 
 ## Potential Future Enhancements
+
+All originally planned enhancements are now complete:
 
 1. ~~**Structured error codes**: Replace generic errors with domain-specific codes~~ (Done!)
 2. ~~**Webhook retry mechanism**: Add exponential backoff for failed webhooks~~ (Done!)
 3. ~~**Rate limit info endpoint**: Let clients query their current rate limit status~~ (Done!)
 4. ~~**SDK retry logic**: Automatic exponential backoff for transient failures~~ (Done!)
 5. ~~**Task log persistence**: Store logs to R2 for retrieval via API~~ (Done!)
-6. **Real-time log streaming to R2**: Stream logs to R2 during execution (incremental), not just after completion
+6. ~~**Real-time log streaming to R2**: Stream logs to R2 during execution (incremental)~~ (Done!)
 
 ## Notes
 
@@ -45,5 +47,6 @@ Added **task log persistence to R2**:
 - Webhook retry config is defined in `src/queue/consumer.ts` (WebhookRetryConfig interface)
 - Rate limit info endpoint: `src/routes/rateLimit.ts`
 - SDK retry logic: TypeScript in `sdk/typescript/src/client.ts`, Python in `sdk/python/helios_sdk/client.py`
-- Log storage: SSE/WS in `src/routes/tasks.ts` and `src/routes/stream.ts`, async in `src/queue/consumer.ts`
+- Streaming log manager: `src/utils/logs.ts` (`StreamingLogManager` class)
+- Log storage uses streaming in: SSE (`src/routes/tasks.ts`), WS (`src/routes/stream.ts`), async (`src/queue/consumer.ts`)
 - Container raw logs endpoint: `container/server.mjs` at `/logs/raw`

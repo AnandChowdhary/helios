@@ -34,7 +34,7 @@ export interface HeliosErrorCause {
 export function createError(
   code: ErrorCode,
   customMessage?: string,
-  details?: unknown
+  details?: unknown,
 ): HTTPException {
   const status = ErrorStatusCodes[code] as ContentfulStatusCode;
   const message = customMessage || ErrorMessages[code];
@@ -51,7 +51,7 @@ export function createError(
 export function errorResponse(
   code: ErrorCode,
   customMessage?: string,
-  details?: unknown
+  details?: unknown,
 ): ErrorResponse {
   return {
     error: {

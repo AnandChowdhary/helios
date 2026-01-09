@@ -201,7 +201,9 @@ describe("GET /v1/rate-limit", () => {
     const body = (await res.json()) as RateLimitInfoResponse;
 
     // Allow for slight timing variations (within 1 second)
-    expect(body.rateLimit.resetAtUnix).toBeGreaterThanOrEqual(expectedResetTime);
+    expect(body.rateLimit.resetAtUnix).toBeGreaterThanOrEqual(
+      expectedResetTime,
+    );
     expect(body.rateLimit.resetAtUnix).toBeLessThan(expectedResetTime + 60000);
   });
 
