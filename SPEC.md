@@ -2269,17 +2269,3 @@ For CI/CD, add these to GitHub Secrets:
 - `ANTHROPIC_API_KEY` (for E2E tests)
 
 ONCE YOU ARE DONE, THINK OF WHATEVER YOU WANT TO WORK ON NEXT THAT MAKES SENSE AND UPDATE THE SPEC ACCORDINGLY.
-
----
-
-## Progress Notes
-
-### 2026-01-09: SDK Rate Limit Support
-Added `getRateLimit()` method to both TypeScript and Python SDKs to expose the `GET /v1/rate-limit` endpoint. This allows SDK users to check their current rate limit and concurrent task status before making API calls.
-
-**Changes:**
-- TypeScript SDK: Added `getRateLimit()` method and `RateLimitResponse`, `RateLimitInfo`, `ConcurrentTasksInfo` types
-- Python SDK: Added `get_rate_limit()` method to both sync and async clients with corresponding dataclasses
-- Added tests for the new methods in both SDKs
-
-All tests passing (main service + TypeScript SDK + Python SDK).
