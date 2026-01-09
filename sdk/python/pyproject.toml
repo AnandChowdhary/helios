@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "helios-sdk"
+version = "0.1.0"
+description = "Python SDK for Helios Cloud Claude Code API"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Anand Chowdhary" }]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+keywords = ["helios", "claude", "ai", "sdk", "api", "anthropic"]
+dependencies = ["httpx>=0.27.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "pytest-asyncio>=0.24.0", "respx>=0.21.0"]
+
+[project.urls]
+Homepage = "https://github.com/AnandChowdhary/helios"
+Repository = "https://github.com/AnandChowdhary/helios"
+Documentation = "https://github.com/AnandChowdhary/helios#readme"
+Issues = "https://github.com/AnandChowdhary/helios/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["helios_sdk"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
