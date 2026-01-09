@@ -298,6 +298,23 @@ Webhook signature (HMAC-SHA256):
 X-Helios-Signature: sha256=<hmac-of-body>
 ```
 
+#### Webhook Retry Behavior
+
+Webhooks are delivered with automatic retry and exponential backoff:
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| Max Retries | 3 | Up to 4 total attempts (1 initial + 3 retries) |
+| Initial Delay | 1 second | Delay before first retry |
+| Backoff Multiplier | 2x | Exponential backoff (1s, 2s, 4s) |
+| Max Delay | 10 seconds | Maximum delay between retries |
+
+**Retry Conditions:**
+- **Retried:** Network errors, HTTP 429 (rate limit), HTTP 5xx (server errors)
+- **Not Retried:** HTTP 4xx client errors (except 429)
+
+Webhook failures do not affect task completion status. If all retries are exhausted, the failure is logged but the task remains in its completed/failed state.
+
 ---
 
 ## Architecture
