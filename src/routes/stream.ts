@@ -196,7 +196,10 @@ async function processTask(
               await env.TASKS.put(taskId, JSON.stringify(task));
 
               if (parsedData.diff) {
-                await env.ARTIFACTS.put(`${taskId}/diff.patch`, parsedData.diff);
+                await env.ARTIFACTS.put(
+                  `${taskId}/diff.patch`,
+                  parsedData.diff,
+                );
               }
 
               await logManager.finalize();
@@ -204,11 +207,9 @@ async function processTask(
           } catch {
             // If data is not JSON, send as-is
             server.send(
-              createMessage(
-                event as WebSocketStreamMessage["type"],
-                taskId,
-                { raw: data },
-              ),
+              createMessage(event as WebSocketStreamMessage["type"], taskId, {
+                raw: data,
+              }),
             );
           }
         },
