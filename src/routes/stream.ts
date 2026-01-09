@@ -102,10 +102,7 @@ async function processTask(
   taskId: string,
 ): Promise<void> {
   // Use streaming log manager for real-time R2 uploads
-  const logManager = new StreamingLogManager(env, taskId, {
-    flushIntervalMs: 5000, // Flush logs to R2 every 5 seconds
-    maxBufferSize: 50, // Or when buffer reaches 50 entries
-  });
+  const logManager = new StreamingLogManager(env, taskId);
 
   const task: Task = {
     id: taskId,

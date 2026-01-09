@@ -182,10 +182,7 @@ tasksRouter.post(
     // Sync mode: start container and stream SSE response
     return streamSSE(c, async (stream) => {
       // Use streaming log manager for real-time R2 uploads
-      const logManager = new StreamingLogManager(c.env, taskId, {
-        flushIntervalMs: 5000, // Flush logs to R2 every 5 seconds
-        maxBufferSize: 50, // Or when buffer reaches 50 entries
-      });
+      const logManager = new StreamingLogManager(c.env, taskId);
 
       try {
         // Update task status to running
@@ -326,9 +323,6 @@ tasksRouter.post(
             "Failed to connect to container log stream",
           );
           await logManager.finalize();
-
-          // Decrement concurrent task counter on stream failure
-          await decrementActiveTaskCount(c.env, apiKey.id);
         }
 
         // Stop the container after streaming is complete
