@@ -37,10 +37,7 @@ async function processQueuedTask(
   });
 
   // Use streaming log manager for incremental R2 uploads during execution
-  const logManager = new StreamingLogManager(env, taskId, {
-    flushIntervalMs: 5000, // Flush logs to R2 every 5 seconds
-    maxBufferSize: 50, // Or when buffer reaches 50 entries
-  });
+  const logManager = new StreamingLogManager(env, taskId);
 
   console.log(`Starting container for task ${taskId}`, {
     repository: message.repository.url,

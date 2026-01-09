@@ -6,7 +6,7 @@ import type { Env } from "../types";
 export interface StreamingLogConfig {
   /** Flush interval in milliseconds (default: 5000ms / 5 seconds) */
   flushIntervalMs?: number;
-  /** Maximum buffer size before forced flush (default: 100 entries) */
+  /** Maximum buffer size before forced flush (default: 50 entries) */
   maxBufferSize?: number;
 }
 
@@ -40,7 +40,7 @@ export class StreamingLogManager {
     this.env = env;
     this.taskId = taskId;
     this.flushIntervalMs = config.flushIntervalMs ?? 5000;
-    this.maxBufferSize = config.maxBufferSize ?? 100;
+    this.maxBufferSize = config.maxBufferSize ?? 50;
     this.createdAt = new Date().toISOString();
     this.startFlushTimer();
   }
