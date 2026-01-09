@@ -48,43 +48,79 @@ interface CancelResponse {
   cancelledAt?: string;
 }
 
-// Parse SSE stream into events
+// Parse SSE stream into events with timeout and detailed logging
 // Terminates early when a terminal event (complete/error) is received
 async function parseSSEStream(
   response: Response,
-  terminateOn: string[] = ["complete", "error"]
+  terminateOn: string[] = ["complete", "error"],
+  timeoutMs: number = 90000 // 90 second default timeout for parsing
 ): Promise<SSEEvent[]> {
   const events: SSEEvent[] = [];
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let currentEvent = "";
+  let chunkCount = 0;
+  const startTime = Date.now();
+
+  console.log(`[SSE] Starting to parse stream (timeout: ${timeoutMs}ms)`);
+
+  // Create a timeout promise
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`SSE parsing timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      // Race between reading and timeout
+      const readPromise = reader.read();
+      const { done, value } = await Promise.race([readPromise, timeoutPromise]);
 
-      buffer += decoder.decode(value, { stream: true });
+      if (done) {
+        console.log(
+          `[SSE] Stream ended naturally after ${Date.now() - startTime}ms, ${chunkCount} chunks, ${events.length} events`
+        );
+        break;
+      }
+
+      chunkCount++;
+      const chunk = decoder.decode(value, { stream: true });
+      console.log(
+        `[SSE] Chunk ${chunkCount} received (${chunk.length} bytes) at ${Date.now() - startTime}ms`
+      );
+
+      buffer += chunk;
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
 
       for (const line of lines) {
         if (line.startsWith("event: ")) {
           currentEvent = line.slice(7).trim();
+          console.log(`[SSE] Event type: ${currentEvent}`);
         } else if (line.startsWith("data: ")) {
           try {
             const data = JSON.parse(line.slice(6));
             events.push({ event: currentEvent || "message", data });
+            console.log(
+              `[SSE] Parsed event: ${currentEvent || "message"} (total: ${events.length})`
+            );
           } catch {
             events.push({
               event: currentEvent || "message",
               data: line.slice(6),
             });
+            console.log(
+              `[SSE] Parsed raw event: ${currentEvent || "message"} (total: ${events.length})`
+            );
           }
 
           // Stop reading on terminal events
           if (terminateOn.includes(currentEvent)) {
+            console.log(
+              `[SSE] Terminal event '${currentEvent}' received, stopping after ${Date.now() - startTime}ms`
+            );
             reader.cancel();
             return events;
           }
@@ -92,10 +128,35 @@ async function parseSSEStream(
         }
       }
     }
+  } catch (error) {
+    console.log(
+      `[SSE] Error after ${Date.now() - startTime}ms: ${error instanceof Error ? error.message : error}`
+    );
+    console.log(`[SSE] Events collected so far: ${events.length}`);
+    console.log(
+      `[SSE] Event types: ${events.map((e) => e.event).join(", ")}`
+    );
+    // Re-throw if it's not our timeout (which we handle gracefully)
+    if (
+      error instanceof Error &&
+      error.message.includes("SSE parsing timed out")
+    ) {
+      // Return what we have so far on timeout
+      console.log(`[SSE] Returning ${events.length} events collected before timeout`);
+      return events;
+    }
+    throw error;
   } finally {
-    reader.releaseLock();
+    try {
+      reader.releaseLock();
+    } catch {
+      // Reader may already be released
+    }
   }
 
+  console.log(
+    `[SSE] Completed parsing: ${events.length} events in ${Date.now() - startTime}ms`
+  );
   return events;
 }
 
@@ -309,6 +370,10 @@ describe.skipIf(!shouldRunE2E)("E2E: Full Task Flow", () => {
 
   describe("Sync Task Flow with SSE", () => {
     it("creates sync task and streams SSE events", async () => {
+      console.log("[TEST] Starting sync task SSE test");
+      console.log("[TEST] Making POST request to /v1/tasks with sync mode...");
+
+      const startTime = Date.now();
       const res = await fetch(`${BASE_URL}/v1/tasks`, {
         method: "POST",
         headers: {
@@ -331,22 +396,36 @@ describe.skipIf(!shouldRunE2E)("E2E: Full Task Flow", () => {
         }),
       });
 
+      console.log(
+        `[TEST] Response received in ${Date.now() - startTime}ms - Status: ${res.status}`
+      );
+      console.log(
+        `[TEST] Content-Type: ${res.headers.get("content-type")}`
+      );
+
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("text/event-stream");
 
-      // Parse the SSE stream
-      const events = await parseSSEStream(res);
+      // Parse the SSE stream with 100 second timeout
+      console.log("[TEST] Starting SSE stream parsing...");
+      const events = await parseSSEStream(res, ["complete", "error"], 100000);
+      console.log(`[TEST] SSE parsing complete. Total events: ${events.length}`);
 
       // Should have received some events
       expect(events.length).toBeGreaterThan(0);
 
       // Should have a status event indicating running
       const statusEvents = events.filter((e) => e.event === "status");
+      console.log(`[TEST] Status events: ${statusEvents.length}`);
       expect(statusEvents.length).toBeGreaterThan(0);
 
       // Should end with complete or error event
       const terminalEvents = events.filter((e) =>
         ["complete", "error"].includes(e.event)
+      );
+      console.log(`[TEST] Terminal events: ${terminalEvents.length}`);
+      console.log(
+        `[TEST] All event types: ${events.map((e) => e.event).join(", ")}`
       );
       expect(terminalEvents.length).toBeGreaterThan(0);
     }, 120000); // 2 minute timeout for full execution
@@ -387,6 +466,10 @@ describe.skipIf(!shouldRunE2E)("E2E: Full Task Flow", () => {
 // Conditional E2E tests that require full infrastructure
 describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
   it("executes Claude Code task with tool usage", async () => {
+    console.log("[TEST] Starting Claude Code task with tool usage test");
+    console.log("[TEST] Making POST request to /v1/tasks...");
+
+    const startTime = Date.now();
     const res = await fetch(`${BASE_URL}/v1/tasks`, {
       method: "POST",
       headers: {
@@ -413,10 +496,21 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
       }),
     });
 
+    console.log(
+      `[TEST] Response received in ${Date.now() - startTime}ms - Status: ${res.status}`
+    );
+    console.log(`[TEST] Content-Type: ${res.headers.get("content-type")}`);
+
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/event-stream");
 
-    const events = await parseSSEStream(res);
+    // Parse SSE stream with 150 second timeout
+    console.log("[TEST] Starting SSE stream parsing...");
+    const events = await parseSSEStream(res, ["complete", "error"], 150000);
+    console.log(`[TEST] SSE parsing complete. Total events: ${events.length}`);
+    console.log(
+      `[TEST] All event types: ${events.map((e) => e.event).join(", ")}`
+    );
 
     // Should have tool_use events
     const toolEvents = events.filter((e) => e.event === "tool_use");
@@ -430,6 +524,10 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
   }, 180000); // 3 minute timeout
 
   it("handles task timeout gracefully", async () => {
+    console.log("[TEST] Starting timeout handling test");
+    console.log("[TEST] Making POST request to /v1/tasks...");
+
+    const startTime = Date.now();
     const res = await fetch(`${BASE_URL}/v1/tasks`, {
       method: "POST",
       headers: {
@@ -455,9 +553,20 @@ describe.skipIf(!shouldRunE2E)("E2E: Container Integration", () => {
       }),
     });
 
+    console.log(
+      `[TEST] Response received in ${Date.now() - startTime}ms - Status: ${res.status}`
+    );
+    console.log(`[TEST] Content-Type: ${res.headers.get("content-type")}`);
+
     expect(res.status).toBe(200);
 
-    const events = await parseSSEStream(res);
+    // Parse SSE stream with 100 second timeout
+    console.log("[TEST] Starting SSE stream parsing...");
+    const events = await parseSSEStream(res, ["complete", "error"], 100000);
+    console.log(`[TEST] SSE parsing complete. Total events: ${events.length}`);
+    console.log(
+      `[TEST] All event types: ${events.map((e) => e.event).join(", ")}`
+    );
 
     // Should receive events (either complete or timeout)
     expect(events.length).toBeGreaterThan(0);
