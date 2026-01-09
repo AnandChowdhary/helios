@@ -19,6 +19,7 @@ import type {
   WebSocketStreamMessage,
 } from "../types";
 import { errorResponse, ErrorCodes } from "../utils/errors";
+import { storeLogsToR2, formatLogEntry } from "../utils/logs";
 
 export const streamRouter = new Hono<{ Bindings: Env }>();
 
@@ -100,6 +101,10 @@ async function processTask(
   input: CreateTaskInput,
   taskId: string,
 ): Promise<void> {
+  // Log buffer to collect logs for R2 storage
+  const logBuffer: string[] = [];
+  let logsStoredToR2 = false;
+
   const task: Task = {
     id: taskId,
     status: "pending",
@@ -181,6 +186,11 @@ async function processTask(
         } else if (line.startsWith("data: ")) {
           const eventData = line.slice(6);
 
+          // Capture log entry (skip heartbeats)
+          if (currentEvent !== "heartbeat") {
+            logBuffer.push(formatLogEntry(currentEvent, eventData));
+          }
+
           // Forward message via WebSocket
           try {
             const parsedData = JSON.parse(eventData);
@@ -199,12 +209,18 @@ async function processTask(
               task.result = parsedData;
               await env.TASKS.put(taskId, JSON.stringify(task));
 
-              // Store artifacts
+              // Store artifacts (diff)
               if (parsedData.diff) {
                 await env.ARTIFACTS.put(
                   `${taskId}/diff.patch`,
                   parsedData.diff,
                 );
+              }
+
+              // Store logs to R2
+              if (logBuffer.length > 0) {
+                await storeLogsToR2(env, taskId, logBuffer);
+                logsStoredToR2 = true;
               }
             }
           } catch {
@@ -242,6 +258,11 @@ async function processTask(
           await processLine(line);
         }
       }
+
+      // Store logs if not already stored (stream ended without 'complete' event)
+      if (logBuffer.length > 0 && !logsStoredToR2) {
+        await storeLogsToR2(env, taskId, logBuffer);
+      }
     } else {
       // Container didn't return a stream
       server.send(
@@ -255,6 +276,13 @@ async function processTask(
       task.error = "Failed to connect to container log stream";
       task.completedAt = new Date().toISOString();
       await env.TASKS.put(taskId, JSON.stringify(task));
+
+      // Store error log to R2
+      await storeLogsToR2(
+        env,
+        taskId,
+        formatLogEntry("error", "Failed to connect to container log stream"),
+      );
     }
 
     // Stop the container after streaming is complete
@@ -281,6 +309,12 @@ async function processTask(
     task.error = errorMessage;
     task.completedAt = new Date().toISOString();
     await env.TASKS.put(taskId, JSON.stringify(task));
+
+    // Store logs to R2 (including error)
+    logBuffer.push(formatLogEntry("error", errorMessage));
+    if (logBuffer.length > 0) {
+      await storeLogsToR2(env, taskId, logBuffer);
+    }
 
     // Try to stop container on error
     try {

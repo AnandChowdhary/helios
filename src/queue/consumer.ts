@@ -3,9 +3,11 @@ import {
   startContainerTask,
   getContainerState,
   getContainerResult,
+  getContainerLogs,
 } from "../container/runner";
 import { decrementActiveTaskCount } from "../middleware/concurrentTaskLimit";
 import { trackTaskCompleted } from "../services/usage";
+import { storeLogsToR2, formatLogEntry } from "../utils/logs";
 
 /**
  * Processes a queued task message by starting a container to execute Claude Code.
@@ -54,6 +56,9 @@ async function processQueuedTask(
       message.options.timeout,
     );
 
+    // Fetch accumulated logs from the container
+    const logs = await getContainerLogs(env, taskId);
+
     task.status = result.success ? "completed" : "failed";
     task.completedAt = new Date().toISOString();
     task.result = result;
@@ -62,7 +67,7 @@ async function processQueuedTask(
       expirationTtl: 86400 * 7,
     });
 
-    await storeArtifacts(env, taskId, result);
+    await storeArtifacts(env, taskId, result, logs);
 
     // Track task completion with usage data
     await trackTaskCompleted(env, message.apiKeyId, task);
@@ -87,6 +92,16 @@ async function processQueuedTask(
     await env.TASKS.put(taskId, JSON.stringify(task), {
       expirationTtl: 86400 * 7,
     });
+
+    // Try to fetch logs even on failure (best effort)
+    try {
+      const logs = await getContainerLogs(env, taskId);
+      const errorLog = formatLogEntry("error", task.error ?? "Unknown error");
+      const fullLogs = logs ? `${logs}\n${errorLog}` : errorLog;
+      await storeLogsToR2(env, taskId, fullLogs);
+    } catch {
+      // Ignore log storage errors
+    }
 
     // Track failed task
     await trackTaskCompleted(env, message.apiKeyId, task);
@@ -166,6 +181,7 @@ async function storeArtifacts(
   env: Env,
   taskId: string,
   result: TaskResult,
+  logs?: string | null,
 ): Promise<void> {
   if (result.diff) {
     await env.ARTIFACTS.put(`${taskId}/diff.patch`, result.diff, {
@@ -182,6 +198,11 @@ async function storeArtifacts(
       createdAt: new Date().toISOString(),
     },
   });
+
+  // Store logs if available
+  if (logs) {
+    await storeLogsToR2(env, taskId, logs);
+  }
 }
 
 /**

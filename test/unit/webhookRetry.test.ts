@@ -14,6 +14,7 @@ vi.mock("../../src/container/runner", () => ({
     filesChanged: [],
     usage: { inputTokens: 100, outputTokens: 50 },
   }),
+  getContainerLogs: vi.fn().mockResolvedValue("[mock] Task logs"),
 }));
 
 // Mock the concurrent task limit module

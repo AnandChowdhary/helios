@@ -14,6 +14,7 @@ vi.mock("../../src/container/runner", () => ({
     filesChanged: [],
     usage: { inputTokens: 100, outputTokens: 50 },
   }),
+  getContainerLogs: vi.fn().mockResolvedValue("[mock] Task logs"),
 }));
 
 // Mock the concurrent task limit module
@@ -249,5 +250,58 @@ describe("Queue Consumer", () => {
 
     // Check artifacts were stored
     expect(env.ARTIFACTS.put).toHaveBeenCalled();
+  });
+
+  it("stores logs to R2 on successful completion", async () => {
+    const env = createMockEnv();
+    const task: Task = {
+      id: "task_123",
+      status: "pending",
+      prompt: "Fix the bug",
+      repository: { url: "https://github.com/user/repo", branch: "main" },
+      createdAt: new Date().toISOString(),
+    };
+    mockTasksKV.set("task_123", JSON.stringify(task));
+
+    const message = createMockMessage(sampleQueueMessage);
+    const batch = createMockBatch([message]);
+
+    await handleQueue(batch, env);
+
+    // Check logs were stored to R2
+    const putCalls = (env.ARTIFACTS.put as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[string, unknown, unknown?]>;
+    const logCall = putCalls.find((call) => call[0] === "task_123/logs.txt");
+    expect(logCall).toBeDefined();
+    expect(logCall![1]).toContain("[mock] Task logs");
+  });
+
+  it("stores logs with correct metadata", async () => {
+    const env = createMockEnv();
+    const task: Task = {
+      id: "task_123",
+      status: "pending",
+      prompt: "Fix the bug",
+      repository: { url: "https://github.com/user/repo", branch: "main" },
+      createdAt: new Date().toISOString(),
+    };
+    mockTasksKV.set("task_123", JSON.stringify(task));
+
+    const message = createMockMessage(sampleQueueMessage);
+    const batch = createMockBatch([message]);
+
+    await handleQueue(batch, env);
+
+    // Check logs metadata
+    const putCalls = (env.ARTIFACTS.put as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[string, unknown, unknown?]>;
+    const logCall = putCalls.find((call) => call[0] === "task_123/logs.txt");
+    expect(logCall).toBeDefined();
+    // Third argument should be the options with customMetadata
+    const options = logCall![2] as {
+      customMetadata?: { taskId: string; createdAt: string; lineCount: string };
+    };
+    expect(options?.customMetadata?.taskId).toBe("task_123");
+    expect(options?.customMetadata?.lineCount).toBeDefined();
   });
 });
