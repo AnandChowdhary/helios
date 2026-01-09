@@ -55,6 +55,7 @@ describe("rateLimitMiddleware", () => {
         list: vi.fn(),
         getWithMetadata: vi.fn(),
       } as unknown as KVNamespace,
+      USAGE: {} as KVNamespace,
       ARTIFACTS: {} as R2Bucket,
       CLAUDE_RUNNER: {} as DurableObjectNamespace,
       ENVIRONMENT: "test",

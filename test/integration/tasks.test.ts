@@ -75,6 +75,7 @@ describe("Tasks API Integration", () => {
   let mockTasksKV: Map<string, string>;
   let mockApiKeysKV: Map<string, string>;
   let mockRateLimitsKV: Map<string, string>;
+  let mockUsageKV: Map<string, string>;
   let testApiKeyHash: string;
 
   const validPayload = {
@@ -103,6 +104,7 @@ describe("Tasks API Integration", () => {
     mockTasksKV = new Map();
     mockApiKeysKV = new Map();
     mockRateLimitsKV = new Map();
+    mockUsageKV = new Map();
 
     // Set up valid API key
     testApiKeyHash = await hashApiKey("test-api-key");
@@ -140,6 +142,19 @@ describe("Tasks API Integration", () => {
         get: vi.fn(async (key: string) => mockRateLimitsKV.get(key) ?? null),
         put: vi.fn(async (key: string, value: string) => {
           mockRateLimitsKV.set(key, value);
+        }),
+        delete: vi.fn(),
+        list: vi.fn(),
+        getWithMetadata: vi.fn(),
+      } as unknown as KVNamespace,
+      USAGE: {
+        get: vi.fn(async (key: string, format?: string) => {
+          const value = mockUsageKV.get(key);
+          if (!value) return null;
+          return format === "json" ? JSON.parse(value) : value;
+        }),
+        put: vi.fn(async (key: string, value: string) => {
+          mockUsageKV.set(key, value);
         }),
         delete: vi.fn(),
         list: vi.fn(),

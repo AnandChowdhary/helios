@@ -5,6 +5,7 @@ import {
   getContainerResult,
 } from "../container/runner";
 import { decrementActiveTaskCount } from "../middleware/concurrentTaskLimit";
+import { trackTaskCompleted } from "../services/usage";
 
 /**
  * Processes a queued task message by starting a container to execute Claude Code.
@@ -63,6 +64,9 @@ async function processQueuedTask(
 
     await storeArtifacts(env, taskId, result);
 
+    // Track task completion with usage data
+    await trackTaskCompleted(env, message.apiKeyId, task);
+
     if (message.webhook) {
       await sendWebhook(message.webhook, task);
     }
@@ -83,6 +87,9 @@ async function processQueuedTask(
     await env.TASKS.put(taskId, JSON.stringify(task), {
       expirationTtl: 86400 * 7,
     });
+
+    // Track failed task
+    await trackTaskCompleted(env, message.apiKeyId, task);
 
     if (message.webhook) {
       await sendWebhook(message.webhook, task);

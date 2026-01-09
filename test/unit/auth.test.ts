@@ -73,6 +73,7 @@ describe("authMiddleware", () => {
       } as unknown as KVNamespace,
       TASKS: {} as KVNamespace,
       RATE_LIMITS: {} as KVNamespace,
+      USAGE: {} as KVNamespace,
       ARTIFACTS: {} as R2Bucket,
       CLAUDE_RUNNER: {} as DurableObjectNamespace,
       ENVIRONMENT: "test",

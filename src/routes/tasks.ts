@@ -19,6 +19,11 @@ import {
   incrementActiveTaskCount,
   decrementActiveTaskCount,
 } from "../middleware/concurrentTaskLimit";
+import {
+  trackRequest,
+  trackTaskCreated,
+  trackTaskCompleted,
+} from "../services/usage";
 
 export const tasksRouter = new Hono<{ Bindings: Env }>();
 
@@ -45,6 +50,10 @@ tasksRouter.post(
 
     // Increment concurrent task counter
     await incrementActiveTaskCount(c.env, apiKey.id);
+
+    // Track request and task creation
+    await trackRequest(c.env, apiKey.id);
+    await trackTaskCreated(c.env, apiKey.id);
 
     await c.env.TASKS.put(taskId, JSON.stringify(task), {
       expirationTtl: 86400 * 7,
@@ -175,6 +184,9 @@ tasksRouter.post(
                     task.result = result;
                     await c.env.TASKS.put(taskId, JSON.stringify(task));
 
+                    // Track task completion with usage data
+                    await trackTaskCompleted(c.env, apiKey.id, task);
+
                     // Store artifacts
                     if (result.diff) {
                       await c.env.ARTIFACTS.put(
@@ -203,6 +215,9 @@ tasksRouter.post(
           task.error = "Failed to connect to container log stream";
           task.completedAt = new Date().toISOString();
           await c.env.TASKS.put(taskId, JSON.stringify(task));
+
+          // Track failed task
+          await trackTaskCompleted(c.env, apiKey.id, task);
         }
 
         // Stop the container after streaming is complete
@@ -230,6 +245,9 @@ tasksRouter.post(
         task.error = errorMessage;
         task.completedAt = new Date().toISOString();
         await c.env.TASKS.put(taskId, JSON.stringify(task));
+
+        // Track failed task
+        await trackTaskCompleted(c.env, apiKey.id, task);
 
         // Try to stop container on error
         try {
