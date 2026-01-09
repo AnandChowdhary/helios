@@ -455,12 +455,12 @@ Use `--dangerously-skip-permissions` only because:
 
 ### Phase 1: Core API (MVP)
 
-- [ ] Task creation endpoint (`POST /v1/tasks`)
-- [ ] Task status endpoint (`GET /v1/tasks/:taskId`)
-- [ ] Synchronous execution with streaming (SSE)
-- [ ] Basic container lifecycle (start, run, destroy)
-- [ ] Git clone and credential handling
-- [ ] Single Cloudflare Container deployment
+- [x] Task creation endpoint (`POST /v1/tasks`)
+- [x] Task status endpoint (`GET /v1/tasks/:taskId`)
+- [x] Synchronous execution with streaming (SSE)
+- [x] Basic container lifecycle (start, run, destroy)
+- [x] Git clone and credential handling
+- [x] Single Cloudflare Container deployment
 
 ### Phase 2: Async & Webhooks
 

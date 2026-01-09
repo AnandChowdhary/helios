@@ -49,44 +49,6 @@ class HeliosError(Exception):
         self.code = code
 
 
-def _to_camel_case(snake_str: str) -> str:
-    """Convert snake_case to camelCase."""
-    components = snake_str.split("_")
-    return components[0] + "".join(x.title() for x in components[1:])
-
-
-def _convert_keys_to_camel(obj: Any) -> Any:
-    """Recursively convert dict keys from snake_case to camelCase."""
-    if isinstance(obj, dict):
-        return {
-            _to_camel_case(k): _convert_keys_to_camel(v)
-            for k, v in obj.items()
-            if v is not None
-        }
-    elif isinstance(obj, list):
-        return [_convert_keys_to_camel(item) for item in obj]
-    return obj
-
-
-def _to_snake_case(camel_str: str) -> str:
-    """Convert camelCase to snake_case."""
-    result = []
-    for i, char in enumerate(camel_str):
-        if char.isupper() and i > 0:
-            result.append("_")
-        result.append(char.lower())
-    return "".join(result)
-
-
-def _convert_keys_to_snake(obj: Any) -> Any:
-    """Recursively convert dict keys from camelCase to snake_case."""
-    if isinstance(obj, dict):
-        return {_to_snake_case(k): _convert_keys_to_snake(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [_convert_keys_to_snake(item) for item in obj]
-    return obj
-
-
 def _build_payload(input_obj: Union[CreateAsyncTaskInput, CreateStreamTaskInput]) -> dict:
     """Build API payload from input object."""
     # Build repository dict

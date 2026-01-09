@@ -5,10 +5,17 @@ const INPUT_TOKEN_COST_PER_MILLION = 3.0; // $3 per 1M input tokens
 const OUTPUT_TOKEN_COST_PER_MILLION = 15.0; // $15 per 1M output tokens
 
 /**
- * Get the current date in YYYY-MM-DD format
+ * Get a date in YYYY-MM-DD format
  */
-function getDateKey(date: Date = new Date()): string {
+export function getDateKey(date: Date = new Date()): string {
   return date.toISOString().split("T")[0];
+}
+
+/**
+ * Get the first day of the month in YYYY-MM-DD format
+ */
+export function getFirstOfMonth(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 /**
@@ -224,7 +231,5 @@ export async function getCurrentMonthUsage(
   apiKeyId: string,
 ): Promise<UsageSummary> {
   const now = new Date();
-  const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  const endDate = getDateKey(now);
-  return getUsageSummary(env, apiKeyId, startDate, endDate);
+  return getUsageSummary(env, apiKeyId, getFirstOfMonth(now), getDateKey(now));
 }
