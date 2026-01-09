@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { tasksRouter } from "./routes/tasks";
 import { streamRouter } from "./routes/stream";
 import { usageRouter } from "./routes/usage";
+import { rateLimitRouter } from "./routes/rateLimit";
 import { dashboardRouter } from "./routes/dashboard";
 import { authMiddleware } from "./middleware/auth";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
@@ -50,6 +51,7 @@ app.use("/v1/*", authMiddleware);
 app.use("/v1/*", rateLimitMiddleware);
 app.route("/v1/tasks", tasksRouter);
 app.route("/v1/usage", usageRouter);
+app.route("/v1/rate-limit", rateLimitRouter);
 
 export default {
   fetch: app.fetch,

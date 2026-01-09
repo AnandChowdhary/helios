@@ -278,6 +278,46 @@ Push changes to remote (requires git credentials in original request).
 
 ---
 
+#### `GET /v1/rate-limit`
+
+Get current rate limit status for the authenticated API key. This endpoint allows clients to check their rate limit and concurrent task status.
+
+**Response:**
+
+```json
+{
+  "rateLimit": {
+    "limit": 60,
+    "current": 15,
+    "remaining": 45,
+    "resetAt": "2025-01-08T10:01:00.000Z",
+    "resetAtUnix": 1704711660000,
+    "windowMs": 60000
+  },
+  "concurrentTasks": {
+    "limit": 5,
+    "active": 2,
+    "remaining": 3
+  }
+}
+```
+
+**Response Fields:**
+
+| Field | Description |
+|-------|-------------|
+| `rateLimit.limit` | Maximum requests allowed per minute |
+| `rateLimit.current` | Requests made in current window |
+| `rateLimit.remaining` | Requests remaining in current window |
+| `rateLimit.resetAt` | ISO timestamp when limit resets |
+| `rateLimit.resetAtUnix` | Unix timestamp (ms) when limit resets |
+| `rateLimit.windowMs` | Window duration in milliseconds (60000) |
+| `concurrentTasks.limit` | Maximum concurrent tasks allowed |
+| `concurrentTasks.active` | Currently active tasks |
+| `concurrentTasks.remaining` | Available concurrent task slots |
+
+---
+
 ### Webhook Payloads
 
 When a task completes, Helios sends a webhook:
@@ -494,9 +534,10 @@ const TaskSchema = z.object({
 
 ### Rate Limiting
 
-- Per-API-key rate limits
-- Concurrent task limits
+- Per-API-key rate limits (configurable requests per minute)
+- Concurrent task limits (configurable max concurrent tasks)
 - Cost-based throttling (based on token usage)
+- Rate limit status available via `GET /v1/rate-limit` endpoint
 
 ### Error Codes
 
