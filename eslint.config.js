@@ -41,6 +41,8 @@ export default [
         WebSocket: "readonly",
         WebSocketPair: "readonly",
         ArrayBuffer: "readonly",
+        ReadableStream: "readonly",
+        globalThis: "readonly",
       },
     },
     plugins: {

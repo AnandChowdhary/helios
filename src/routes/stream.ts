@@ -20,6 +20,7 @@ import type {
 } from "../types";
 import { errorResponse, ErrorCodes } from "../utils/errors";
 import { StreamingLogManager } from "../utils/logs";
+import { processSSEStream } from "../utils/sse";
 
 export const streamRouter = new Hono<{ Bindings: Env }>();
 
@@ -173,87 +174,45 @@ async function processTask(
     const logResponse = await getContainerLogStream(env, taskId);
 
     if (logResponse && logResponse.body) {
-      const reader = logResponse.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let currentEvent = "message";
-
-      // Helper function to process SSE lines
-      const processLine = async (line: string) => {
-        if (line.startsWith("event: ")) {
-          currentEvent = line.slice(7).trim();
-        } else if (line.startsWith("data: ")) {
-          const eventData = line.slice(6);
-
-          // Capture log entry (skip heartbeats) - streams incrementally to R2
-          if (currentEvent !== "heartbeat") {
-            await logManager.addLog(currentEvent, eventData);
-          }
-
+      await processSSEStream(logResponse.body, {
+        logManager,
+        skipHeartbeats: true,
+        onEvent: async (event, data) => {
           // Forward message via WebSocket
           try {
-            const parsedData = JSON.parse(eventData);
+            const parsedData = JSON.parse(data);
             server.send(
               createMessage(
-                currentEvent as WebSocketStreamMessage["type"],
+                event as WebSocketStreamMessage["type"],
                 taskId,
                 parsedData,
               ),
             );
 
-            // If we got a complete event, update task
-            if (currentEvent === "complete") {
+            if (event === "complete") {
               task.status = parsedData.success ? "completed" : "failed";
               task.completedAt = new Date().toISOString();
               task.result = parsedData;
               await env.TASKS.put(taskId, JSON.stringify(task));
 
-              // Store artifacts (diff)
               if (parsedData.diff) {
-                await env.ARTIFACTS.put(
-                  `${taskId}/diff.patch`,
-                  parsedData.diff,
-                );
+                await env.ARTIFACTS.put(`${taskId}/diff.patch`, parsedData.diff);
               }
 
-              // Finalize logs - flushes remaining buffer and marks as complete
               await logManager.finalize();
             }
           } catch {
             // If data is not JSON, send as-is
             server.send(
               createMessage(
-                currentEvent as WebSocketStreamMessage["type"],
+                event as WebSocketStreamMessage["type"],
                 taskId,
-                { raw: eventData },
+                { raw: data },
               ),
             );
           }
-        }
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Parse SSE events from the container response
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          await processLine(line);
-        }
-      }
-
-      // Process any remaining content in buffer after stream ends
-      if (buffer.trim()) {
-        const remainingLines = buffer.split("\n");
-        for (const line of remainingLines) {
-          await processLine(line);
-        }
-      }
+        },
+      });
 
       // Finalize logs if not already done (stream ended without 'complete' event)
       await logManager.finalize();
