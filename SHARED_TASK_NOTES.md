@@ -4,7 +4,7 @@
 
 **PROJECT COMPLETE.** All SPEC.md phases complete + all additional enhancements implemented.
 
-**Verified on 2026-01-09:** All tests pass (228 main + 25 TS SDK + 31 Python SDK), TypeScript type checking passes, ESLint passes. Code reviewed and cleaned up.
+**Verified on 2026-01-09:** All tests pass (229 main + 25 TS SDK + 31 Python SDK), TypeScript type checking passes, ESLint passes.
 
 **Deployed URLs:**
 
@@ -14,28 +14,14 @@
 
 ## Recent Changes (2026-01-09)
 
-Added **real-time log streaming to R2**:
+**Added missing `estimatedDuration` and `streamUrl` fields to async task response:**
 
-- New `StreamingLogManager` class in `src/utils/logs.ts` handles incremental log uploads
-- Logs are flushed to R2 every 5 seconds during task execution (configurable)
-- Also flushes when buffer reaches 50 entries (configurable)
-- All execution modes updated: SSE sync, WebSocket stream, and async queue
-- Metadata now includes `status` field: "streaming" (during execution) or "complete" (after task ends)
-- Added `getLogMetadata()` function to check log status without downloading the full file
-- Logs are accessible via `GET /v1/tasks/:id/logs` even while task is running
-- 15 new tests for StreamingLogManager functionality
-- Fallback mechanism: if incremental writes fail, all in-memory logs are written at finalization
+- The async task creation response (202 Accepted) now includes all fields specified in SPEC.md
+- `estimatedDuration`: Uses the task timeout value (default 300 seconds)
+- `streamUrl`: WebSocket URL for streaming task updates (`wss://host/v1/tasks/stream`)
+- Added 1 new test to verify custom timeout is used for `estimatedDuration`
 
-## Potential Future Enhancements
-
-All originally planned enhancements are now complete:
-
-1. ~~**Structured error codes**: Replace generic errors with domain-specific codes~~ (Done!)
-2. ~~**Webhook retry mechanism**: Add exponential backoff for failed webhooks~~ (Done!)
-3. ~~**Rate limit info endpoint**: Let clients query their current rate limit status~~ (Done!)
-4. ~~**SDK retry logic**: Automatic exponential backoff for transient failures~~ (Done!)
-5. ~~**Task log persistence**: Store logs to R2 for retrieval via API~~ (Done!)
-6. ~~**Real-time log streaming to R2**: Stream logs to R2 during execution (incremental)~~ (Done!)
+Previous: Added real-time log streaming to R2 (StreamingLogManager class)
 
 ## Notes
 

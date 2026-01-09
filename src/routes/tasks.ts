@@ -168,12 +168,18 @@ tasksRouter.post(
         await c.env.TASK_QUEUE.send(queueMessage);
       }
 
+      const origin = new URL(c.req.url).origin;
+      // Estimate duration based on timeout setting (default to timeout value as upper bound)
+      const estimatedDuration = input.options?.timeout ?? 300;
+
       return c.json(
         {
           taskId,
           status: "pending",
           createdAt: task.createdAt,
-          statusUrl: `${new URL(c.req.url).origin}/v1/tasks/${taskId}`,
+          estimatedDuration,
+          streamUrl: `${origin.replace("http://", "ws://").replace("https://", "wss://")}/v1/tasks/stream`,
+          statusUrl: `${origin}/v1/tasks/${taskId}`,
         },
         202,
       );
